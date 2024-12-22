@@ -11,7 +11,7 @@ CORS(app)
 client_id = os.getenv('SPOTIFY_CLIENT_ID')
 client_secret = os.getenv('SPOTIFY_CLIENT_SECRET')
 redirect_uri = 'http://localhost:8888/callback'
-scope = 'playlist-read-private playlist-modify-private'
+scope = 'playlist-read-private playlist-modify-private user-library-read'
 
 # set up Spotify OAuth
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id,
@@ -93,6 +93,24 @@ def get_playlists():
     ]
     return jsonify(playlist_data)
 
+@app.route('/get-playlist-details/<playlist_id>', methods=['GET'])
+def get_playlist_details(playlist_id):
+    try:
+        playlist = sp.playlist(playlist_id)
+
+        playlist_data = {
+            'id': playlist['id'],
+            'name': playlist['name'],
+            'description': playlist.get('description', 'No description available'),
+            'track_count': playlist['tracks']['total'],
+            'image_url': playlist['images'][0]['url'] if playlist['images'] else '/assets/default-cover-image.jpg',  # Fallback to a default image if no image is available
+            'genres': [item['name'] for item in playlist.get('genres', [])] 
+        }
+
+        return jsonify(playlist_data)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)

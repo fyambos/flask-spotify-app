@@ -1,0 +1,36 @@
+<div class="max-w-lg mx-auto bg-white p-6 rounded-lg shadow-lg">
+    <h2 class="text-3xl font-semibold text-center text-gray-800 mb-6">Add Playlist to Firestore</h2>
+  
+    <label for="playlist" class="block text-lg font-medium text-gray-700 mb-3">Select a Playlist:</label>
+    <select
+      id="playlist"
+      [(ngModel)]="selectedPlaylistId"
+      class="block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+    >
+      <option value="" disabled>Select a playlist</option>
+      <option *ngFor="let playlist of playlists" [value]="playlist.id">
+        {{ playlist.name }}
+      </option>
+    </select>
+  
+    <label for="genres" class="block text-lg font-medium text-gray-700 mt-4 mb-2">Enter Genre Names:</label>
+    <input
+      id="genres"
+      type="text"
+      [(ngModel)]="genreNames"
+      class="block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+      placeholder="Enter comma separated genres"
+    />
+  
+    <button
+      class="mt-6 w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
+      (click)="savePlaylist()"
+    >
+      Save Playlist
+    </button>
+  
+    <div *ngIf="message" class="mt-4 text-center text-gray-700">
+      <p>{{ message }}</p>
+    </div>
+  </div>
+  

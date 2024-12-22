@@ -17,4 +17,7 @@ export class PlaylistService {
   getPlaylists(): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/get-playlists`);
   }
+  getPlaylistDetails(playlistId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/get-playlist-details/${playlistId}`);
+  }
 }

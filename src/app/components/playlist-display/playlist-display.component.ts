@@ -1,7 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { PlaylistService } from 'src/app/services/playlist.service';
+import { PlaylistEditDialogComponent } from '../playlist-edit-dialog/playlist-edit-dialog.component';
+import { MatDialog } from '@angular/material/dialog';
 
 @Component({
   selector: 'app-playlist-display',
@@ -12,7 +14,8 @@ export class PlaylistDisplayComponent implements OnInit {
 
   constructor(
     private firestore: Firestore,
-    private playlistService: PlaylistService
+    private playlistService: PlaylistService,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit(): void {
@@ -49,5 +52,29 @@ export class PlaylistDisplayComponent implements OnInit {
         console.error('Error fetching playlist details:', err);
       }
     });
+  }
+
+  openEditDialog(playlist: any): void {
+    const dialogRef = this.dialog.open(PlaylistEditDialogComponent, {
+      data: { genre_names: playlist.genre_names },
+    });
+
+    dialogRef.afterClosed().subscribe((updatedGenres) => {
+      if (updatedGenres) {
+        this.updateGenresInFirestore(playlist.id, updatedGenres);
+      }
+    });
+  }
+
+  async updateGenresInFirestore(playlistId: string, updatedGenres: string[]): Promise<void> {
+    try {
+      const playlistDoc = doc(this.firestore, 'playlists', playlistId);
+      await updateDoc(playlistDoc, {
+        genre_names: updatedGenres,
+      });
+      console.log('Genres updated successfully!');
+    } catch (error) {
+      console.error('Error updating genres in Firestore:', error);
+    }
   }
 }

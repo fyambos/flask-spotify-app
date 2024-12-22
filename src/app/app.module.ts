@@ -2,6 +2,11 @@ import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialogModule } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { ReactiveFormsModule } from '@angular/forms';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -14,13 +19,15 @@ import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideAuth, getAuth } from '@angular/fire/auth';
 import { environment } from 'src/environments/env.dev';
 import { PlaylistDisplayComponent } from './components/playlist-display/playlist-display.component';
+import { PlaylistEditDialogComponent } from './components/playlist-edit-dialog/playlist-edit-dialog.component';
 
 @NgModule({
   declarations: [
     AppComponent,
     SortPlaylistComponent,
     SetPlaylistsComponent,
-    PlaylistDisplayComponent
+    PlaylistDisplayComponent,
+    PlaylistEditDialogComponent
   ],
   imports: [
     BrowserModule,
@@ -32,6 +39,11 @@ import { PlaylistDisplayComponent } from './components/playlist-display/playlist
     provideFirestore(() => getFirestore()),
     provideAuth(() => getAuth()),
     MatCardModule,
+    MatDialogModule,
+    MatButtonModule,
+    MatIconModule,
+    MatInputModule,
+    ReactiveFormsModule,
     
   ],
   providers: [],

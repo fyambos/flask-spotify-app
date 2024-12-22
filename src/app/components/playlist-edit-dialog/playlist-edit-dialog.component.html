@@ -1,0 +1,13 @@
+<h1 mat-dialog-title>Edit Genres</h1>
+    <div mat-dialog-content>
+      <form [formGroup]="genreForm" (ngSubmit)="onSubmit()">
+        <mat-form-field appearance="fill">
+          <mat-label>Genres (comma separated)</mat-label>
+          <input matInput formControlName="genres" placeholder="e.g., jazz, pop, rock">
+        </mat-form-field>
+      </form>
+    </div>
+    <div mat-dialog-actions>
+      <button mat-button (click)="onClose()">Cancel</button>
+      <button mat-button color="primary" (click)="onSubmit()">Save</button>
+</div>

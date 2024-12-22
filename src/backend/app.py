@@ -11,7 +11,7 @@ CORS(app)
 client_id = os.getenv('SPOTIFY_CLIENT_ID')
 client_secret = os.getenv('SPOTIFY_CLIENT_SECRET')
 redirect_uri = 'http://localhost:8888/callback'
-scope = 'playlist-modify-private'
+scope = 'playlist-read-private playlist-modify-private'
 
 # set up Spotify OAuth
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id,
@@ -78,6 +78,20 @@ def sort_playlist():
                 break
 
     return jsonify({"message": "Playlist sorted successfully!"})
+
+@app.route('/get-playlists', methods=['GET'])
+def get_playlists():
+    playlists = []
+    results = sp.current_user_playlists()
+    while results:
+        playlists.extend(results['items'])
+        results = sp.next(results) if results['next'] else None
+    
+    playlist_data = [
+        {'id': playlist['id'], 'name': playlist['name']}
+        for playlist in playlists
+    ]
+    return jsonify(playlist_data)
 
 
 if __name__ == '__main__':

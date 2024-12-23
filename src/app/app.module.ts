@@ -20,6 +20,7 @@ import { provideAuth, getAuth } from '@angular/fire/auth';
 import { environment } from 'src/environments/env.dev';
 import { PlaylistDisplayComponent } from './components/playlist-display/playlist-display.component';
 import { PlaylistEditDialogComponent } from './components/playlist-edit-dialog/playlist-edit-dialog.component';
+import { ConfirmDialogComponent } from './components/confirm-dialog/confirm-dialog.component';
 
 @NgModule({
   declarations: [
@@ -27,7 +28,8 @@ import { PlaylistEditDialogComponent } from './components/playlist-edit-dialog/p
     SortPlaylistComponent,
     SetPlaylistsComponent,
     PlaylistDisplayComponent,
-    PlaylistEditDialogComponent
+    PlaylistEditDialogComponent,
+    ConfirmDialogComponent,
   ],
   imports: [
     BrowserModule,

@@ -1,9 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { PlaylistService } from 'src/app/services/playlist.service';
 import { PlaylistEditDialogComponent } from '../playlist-edit-dialog/playlist-edit-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
+import { ConfirmDialogComponent } from '../confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-playlist-display',
@@ -28,10 +29,11 @@ export class PlaylistDisplayComponent implements OnInit {
       const snapshot = await getDocs(playlistsCollection);
       this.playlists = snapshot.docs.map((doc) => {
         const playlist = doc.data();
+        playlist['id'] = doc.id;
         playlist['details'] = null;
         return playlist;
       });
-
+  
       for (const playlist of this.playlists) {
         this.getPlaylistDetails(playlist.playlist_id);
       }
@@ -39,6 +41,7 @@ export class PlaylistDisplayComponent implements OnInit {
       console.error('Error fetching playlists from Firestore:', error);
     }
   }
+  
 
   getPlaylistDetails(playlistId: string): void {
     this.playlistService.getPlaylistDetails(playlistId).subscribe({
@@ -72,9 +75,40 @@ export class PlaylistDisplayComponent implements OnInit {
       await updateDoc(playlistDoc, {
         genre_names: updatedGenres,
       });
+      const playlist = this.playlists.find(p => p.id === playlistId);
+      if (playlist) {
+        playlist.genre_names = updatedGenres;
+      }
       console.log('Genres updated successfully!');
     } catch (error) {
       console.error('Error updating genres in Firestore:', error);
     }
   }
+
+  openDeleteDialog(playlist: any): void {
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Confirm',
+        message: 'Are you sure you want to delete this playlist?',
+      },
+    });
+
+    dialogRef.afterClosed().subscribe((confirmed) => {
+      if (confirmed) {
+        this.deletePlaylist(playlist.id);
+      }
+    });
+  }
+
+  async deletePlaylist(playlistId: string): Promise<void> {
+    try {
+      const playlistDoc = doc(this.firestore, 'playlists', playlistId);
+      await deleteDoc(playlistDoc);
+      this.playlists = this.playlists.filter((p) => p.id !== playlistId);
+      console.log('Playlist deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting playlist:', error);
+    }
+  }
+
 }

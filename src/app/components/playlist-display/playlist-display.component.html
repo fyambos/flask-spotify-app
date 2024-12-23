@@ -8,12 +8,20 @@
           <img *ngIf="playlist.details" mat-card-image [src]="playlist.details?.image_url || '/assets/default-cover-image.jpg'" alt="Playlist image" class="w-24 h-24 object-cover rounded-lg shadow-md" />
           
           <div class="flex-1" *ngIf="playlist.details">
-            <mat-card-header class="bg-gray-800 text-white p-2 rounded-md">
-              <mat-card-title class="text-2xl font-bold mb-2">{{ playlist.details?.name }}</mat-card-title>
-              <button mat-icon-button (click)="openEditDialog(playlist)">
-                <mat-icon>edit</mat-icon>
-              </button>
-            </mat-card-header>
+            <!-- Flex container to justify space between title and button -->
+            <div class="flex justify-between items-center bg-gray-800 text-white p-2 rounded-md">
+              <mat-card-header class="p-0">
+                <mat-card-title class="text-2xl font-bold">{{ playlist.details?.name }}</mat-card-title>
+              </mat-card-header>
+               <div class="flex space-x-2">
+                <button mat-icon-button (click)="openEditDialog(playlist)" class="text-white">
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button mat-icon-button (click)="openDeleteDialog(playlist)" class="text-white">
+                  <mat-icon>delete</mat-icon>
+                </button>
+               </div>
+            </div>
   
             <mat-card-content class="mt-2">
               <p class="text-gray-600 text-sm">

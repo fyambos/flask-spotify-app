@@ -70,6 +70,14 @@ def sort_playlist():
             if any(genre_name in genre for genre in genres for genre_name in playlist_data['genre_names']):
                 target_playlist_id = playlist_data['playlist_id']
 
+                # fetch playlist name from Spotify
+                try:
+                    target_playlist_details = sp.playlist(target_playlist_id)
+                    target_playlist_name = target_playlist_details['name']
+                except Exception as e:
+                    print(f"Error fetching playlist details for {target_playlist_id}: {e}")
+                    continue
+
                 # fetch existing tracks in the target playlist
                 target_results = sp.playlist_tracks(target_playlist_id)
                 target_tracks = target_results['items']
@@ -77,10 +85,10 @@ def sort_playlist():
 
                 if track_id not in target_track_ids:
                     sp.user_playlist_add_tracks(sp.current_user()['id'], target_playlist_id, [track_id])
-                    print(f"Moved track {track['name']} to {target_playlist_id} playlist.")
+                    print(f"Moved track {track['name']} to {target_playlist_name} playlist.")
                     sp.playlist_remove_all_occurrences_of_items(playlist_id, [track_id])
                 else:
-                    print(f"Track {track['name']} is already in {target_playlist_id} playlist.")
+                    print(f"Track {track['name']} is already in {target_playlist_name} playlist.")
                     sp.playlist_remove_all_occurrences_of_items(playlist_id, [track_id])
                 
                 # mark track as processed
@@ -88,6 +96,7 @@ def sort_playlist():
                 break
 
     return jsonify({"message": "Playlist sorted successfully!"})
+
 
 @app.route('/get-playlists', methods=['GET'])
 def get_playlists():

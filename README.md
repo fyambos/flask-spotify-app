@@ -76,10 +76,10 @@ cred = credentials.Certificate('/path/to/firebase-admin-sdk.json')
 Steps to Obtain Firebase Admin SDK JSON:
 1. Go to Firebase Console: Navigate to your Firebase project at https://console.firebase.google.com.
 2. Go to Project Settings:
-* In the top left corner, click on the gear icon (⚙️) and select Project Settings.
+    * In the top left corner, click on the gear icon (⚙️) and select Project Settings.
 3. Create a Service Account:
-* Go to the Service accounts tab.
-* Click on Generate new private key. This will download a JSON file to your computer. This file contains all the necessary credentials to allow server-side access to Firebase services.
+    * Go to the Service accounts tab.
+    * Click on Generate new private key. This will download a JSON file to your computer. This file contains all the necessary credentials to allow server-side access to Firebase services.
 
 ### Angular Environment
 Update src/environments/env.dev.ts with your Firebase configuration:
@@ -99,17 +99,17 @@ export const environment = {
 
 ## Usage
 1. **Adding and Viewing Playlists**: Navigate to the home page to see saved playlists with album covers, names, and genres.
-* You define how to sort your tracks into specific playlists, for this, simply add those specific playlists via the add button, and define the spotify genres that should be associated with this playlist. This feature helps you categorize your tracks based on their genres.
-* You can find the spotify genres [here](https://gist.github.com/andytlr/4104c667a62d8145aa3a).
-* You can also see the song's genres in the Flask node of app.py when sorting playlists.
+    * You define how to sort your tracks into specific playlists, for this, simply add those specific playlists via the add button, and define the spotify genres that should be associated with this playlist. This feature helps you categorize your tracks based on their genres.
+    * You can find the spotify genres [here](https://gist.github.com/andytlr/4104c667a62d8145aa3a).
+    * You can also see the song's genres in the Flask node of app.py when sorting playlists.
 2. **Editing Genres**:
-* Click the "Edit" icon to modify genres.
-* Save changes to update Firestore in real-time.
+    * Click the "Edit" icon to modify genres.
+    * Save changes to update Firestore in real-time.
 3. **Deleting Playlists**:
-* Click the "Delete" icon to open a confirmation dialog.
-* Confirm to delete the playlist from Firestore.
+    * Click the "Delete" icon to open a confirmation dialog.
+    * Confirm to delete the playlist from Firestore.
 4. **Sorting Playlists**:
-* Use the /sort-playlist endpoint in the backend to sort tracks into genre-specific playlists.
+    * Use the /sort-playlist endpoint in the backend to sort tracks into genre-specific playlists.
 
 ## Tech Stack
 * **Frontend**: Angular, Tailwind CSS

@@ -1,0 +1,34 @@
+<div class="container mx-auto p-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <!-- Spotify Sorter Card -->
+      <mat-card
+        class="cursor-pointer shadow-lg hover:shadow-xl rounded-xl transition-all transform hover:scale-105"
+        [routerLink]="'/sorter'"
+      >
+        <mat-card-header class="bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-t-xl">
+          <mat-card-title class="text-3xl font-semibold text-center">Spotify Sorter</mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="p-6 text-center">
+          <p class="text-lg text-gray-700">
+            Organize your Spotify playlists with ease! Easily manage your music collection.
+          </p>
+        </mat-card-content>
+      </mat-card>
+  
+      <!-- Spotify Stats Card -->
+      <mat-card
+        class="cursor-pointer shadow-lg hover:shadow-xl rounded-xl transition-all transform hover:scale-105"
+        [routerLink]="'/stats'"
+      >
+        <mat-card-header class="bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-t-xl">
+          <mat-card-title class="text-3xl font-semibold text-center">Spotify Stats</mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="p-6 text-center">
+          <p class="text-lg text-gray-700">
+            View detailed statistics about your Spotify usage, and track your listening habits!
+          </p>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </div>
+  

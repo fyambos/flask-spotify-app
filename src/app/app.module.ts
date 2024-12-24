@@ -27,6 +27,7 @@ import { TopTracksComponent } from './components/top-tracks/top-tracks.component
 import { SpotifySorterComponent } from './pages/spotify-sorter/spotify-sorter.component';
 import { SpotifyStatsComponent } from './pages/spotify-stats/spotify-stats.component';
 import { HomeComponent } from './pages/home/home.component';
+import { HeaderComponent } from './components/header/header.component';
 
 @NgModule({
   declarations: [
@@ -40,6 +41,7 @@ import { HomeComponent } from './pages/home/home.component';
     SpotifySorterComponent,
     SpotifyStatsComponent,
     HomeComponent,
+    HeaderComponent,
   ],
   imports: [
     BrowserModule,

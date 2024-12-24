@@ -13,4 +13,7 @@ export class TrackService {
   getTopTracks(): Observable<any> {
     return this.http.get<any[]>(`${this.apiUrl}/get-top-tracks`);
   }
+  getRecentlyPlayedTracks(): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/get-recently-played`);
+  }
 }

@@ -1,1 +1,30 @@
-<app-top-tracks></app-top-tracks>
+<div class="container mx-auto p-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <mat-card
+            class="cursor-pointer shadow-lg hover:shadow-xl rounded-xl transition-all transform hover:scale-105"
+            [routerLink]="'/top-tracks'"
+        >
+            <mat-card-header class="bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-t-xl">
+                <mat-card-title class="text-3xl font-semibold text-center">Top 10 Tracks</mat-card-title>
+            </mat-card-header>
+            <mat-card-content class="p-6 text-center">
+                <p class="text-md text-gray-600 leading-relaxed">
+                    Explore your most played tracks on Spotify and relive your favorite tunes! Check out the top 10 songs you've enjoyed listening to.
+                </p>
+            </mat-card-content>
+        </mat-card>
+        <mat-card
+            class="cursor-pointer shadow-lg hover:shadow-xl rounded-xl transition-all transform hover:scale-105"
+            [routerLink]="'/recently-played'"
+        >
+            <mat-card-header class="bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-t-xl">
+                <mat-card-title class="text-3xl font-semibold text-center">Recently Played Tracks</mat-card-title>
+            </mat-card-header>
+            <mat-card-content class="p-6 text-center">
+                <p class="text-md text-gray-600 leading-relaxed">
+                    Revisit the tracks you've recently played on Spotify and rediscover the music that’s been on your mind. Enjoy your latest hits and memories!
+                </p>
+            </mat-card-content>
+        </mat-card>
+    </div>
+</div>

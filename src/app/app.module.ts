@@ -15,7 +15,7 @@ import { AppComponent } from './app.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SortPlaylistComponent } from './components/sort-playlist/sort-playlist.component';
 import { HttpClientModule } from '@angular/common/http';
-import { SetPlaylistsComponent } from './components/set-playlists/set-playlists.component';
+import { SavePlaylistsComponent } from './components/save-playlists/save-playlists.component';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideAuth, getAuth } from '@angular/fire/auth';
@@ -34,7 +34,7 @@ import { RecentlyPlayedComponent } from './components/recently-played/recently-p
   declarations: [
     AppComponent,
     SortPlaylistComponent,
-    SetPlaylistsComponent,
+    SavePlaylistsComponent,
     PlaylistDisplayComponent,
     PlaylistEditDialogComponent,
     ConfirmDialogComponent,

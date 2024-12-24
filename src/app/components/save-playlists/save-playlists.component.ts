@@ -4,10 +4,10 @@ import { collection, addDoc } from 'firebase/firestore';
 import { PlaylistService } from 'src/app/services/playlist.service';
 
 @Component({
-  selector: 'app-set-playlists',
-  templateUrl: './set-playlists.component.html',
+  selector: 'app-save-playlists',
+  templateUrl: './save-playlists.component.html',
 })
-export class SetPlaylistsComponent implements OnInit {
+export class SavePlaylistsComponent implements OnInit {
   playlists: any[] = [];
   selectedPlaylistId: string = '';
   genreNames: string = '';

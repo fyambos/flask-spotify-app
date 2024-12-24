@@ -21,6 +21,7 @@ import { environment } from 'src/environments/env.dev';
 import { PlaylistDisplayComponent } from './components/playlist-display/playlist-display.component';
 import { PlaylistEditDialogComponent } from './components/playlist-edit-dialog/playlist-edit-dialog.component';
 import { ConfirmDialogComponent } from './components/confirm-dialog/confirm-dialog.component';
+import { TopTracksComponent } from './components/top-tracks/top-tracks.component';
 
 @NgModule({
   declarations: [
@@ -30,6 +31,7 @@ import { ConfirmDialogComponent } from './components/confirm-dialog/confirm-dial
     PlaylistDisplayComponent,
     PlaylistEditDialogComponent,
     ConfirmDialogComponent,
+    TopTracksComponent,
   ],
   imports: [
     BrowserModule,

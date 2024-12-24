@@ -15,7 +15,7 @@ db = firestore.client()
 client_id = os.getenv('SPOTIFY_CLIENT_ID')
 client_secret = os.getenv('SPOTIFY_CLIENT_SECRET')
 redirect_uri = 'http://localhost:8888/callback'
-scope = 'playlist-read-private playlist-modify-private user-library-read'
+scope = 'playlist-read-private playlist-modify-private user-library-read user-top-read'
 
 # set up Spotify OAuth
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=client_id,
@@ -127,6 +127,25 @@ def get_playlist_details(playlist_id):
         }
 
         return jsonify(playlist_data)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/get-top-tracks', methods=['GET'])
+def get_top_tracks():
+    try:
+        top_tracks = sp.current_user_top_tracks(time_range='long_term', limit=10)
+
+        track_data = []
+        for item in top_tracks['items']:
+            track_data.append({
+                'name': item['name'],
+                'artist': item['artists'][0]['name'],
+                'image_url': item['album']['images'][0]['url'] if item['album']['images'] else '/assets/default-cover-image.jpg',
+                'url': item['external_urls']['spotify']
+            })
+
+        return jsonify(track_data)
 
     except Exception as e:
         return jsonify({'error': str(e)}), 400

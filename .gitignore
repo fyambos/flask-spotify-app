@@ -45,3 +45,6 @@ Thumbs.db
 .env
 env.dev*
 ticket-app-115e1-firebase-adminsdk-op7k7-eecbaae882.json
+
+# Cache
+.cache

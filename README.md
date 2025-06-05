@@ -39,11 +39,15 @@ cd src
 ```bash
 npm install
 ```
-3. Start the development server:
+3. Install angular CLI:
+```bash
+npm install -g @angular/cli
+```
+4. Start the development server:
 ```bash
 ng serve
 ```
-4. Access the app at http://localhost:4200.
+5. Access the app at http://localhost:4200.
 
 ### Backend Setup
 1. Navigate to the backend directory:

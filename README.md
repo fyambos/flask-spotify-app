@@ -1,5 +1,5 @@
 # Playlist Manager
-> A web application for managing playlists with seamless integration with Firestore and Spotify. Users can sort tracks by genre, edit playlists, and delete playlists with confirmation dialogs.
+> A web application for managing Spotify playlists with Firestore integration. Users can sort tracks by genre, edit playlists, and delete playlists.
 
 ## Features
 * Display Saved Playlists: View saved playlists with album artwork and details fetched from Spotify.

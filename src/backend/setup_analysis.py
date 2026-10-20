@@ -290,7 +290,7 @@ def evaluate(sp, entries, data, resolver, multi_playlist=None):
 
 def _evaluate_pass(sp, entries, data, resolver, history, multi_playlist):
     base = config_store.load_config()
-    config = {**base, 'playlists': entries, 'artist_rules': {}, 'multi_playlist': multi_playlist,
+    config = {**base, 'playlists': entries, 'multi_playlist': multi_playlist,
               'artist_history': {**base['artist_history'], 'enabled': history}}
     classifier = Classifier(sp, config, resolver)
     names = {e['id']: e['name'] for e in entries}
@@ -451,7 +451,7 @@ class _RuleAdvisor:
         if went and by_keyword and self.order[home_id] > self.order[went]:
             suggestions.append({'type': 'move_above', 'playlist': home_id, 'value': went})
 
-        if item.get('artist_id'):
+        if item.get('artist_id') and self.c.config['artist_rules'].get(item['artist_id'], {}).get('playlist') != home_id:
             suggestions.append({'type': 'artist', 'playlist': home_id, 'value': item['artist_id'],
                                 'artist': item['artists'][0]})
 

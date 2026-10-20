@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { GenrePlaylist, MisplacedSong, PlaylistStats, RuleSuggestion, SpotifyPlaylist } from 'src/app/services/playlist.service';
-import { suggestionKey, suggestionLabel } from 'src/app/services/rule-suggestions';
+import { isInRules, suggestionKey, suggestionLabel } from 'src/app/services/rule-suggestions';
 
 const FIRST_PAGE = 5;
 const NEXT_PAGE = 10;
@@ -17,6 +17,8 @@ export class GenreListComponent {
   @Input() spotify: { [playlistId: string]: SpotifyPlaylist } = {};
   @Input() removable = true;
   @Input() applied = new Set<string>();
+  @Input() artistRules: { [id: string]: { playlist: string } } = {};
+  @Input() multiPlaylist = false;
   @Output() suggest = new EventEmitter<RuleSuggestion>();
   open = new Set<string>();
   shown: { [id: string]: number } = {};
@@ -59,7 +61,7 @@ export class GenreListComponent {
   }
 
   isApplied(s: RuleSuggestion): boolean {
-    return this.applied.has(suggestionKey(s));
+    return this.applied.has(suggestionKey(s)) || isInRules(s, this.playlists, this.artistRules, this.multiPlaylist);
   }
 
   playlistName(id: string | null): string {

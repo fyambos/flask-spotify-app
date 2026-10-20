@@ -17,6 +17,24 @@ export function suggestionLabel(s: RuleSuggestion, playlists: GenrePlaylist[]): 
   }
 }
 
+/** True when the suggestion is already part of the current rules. */
+export function isInRules(s: RuleSuggestion, playlists: GenrePlaylist[],
+                          artistRules: { [id: string]: { playlist: string } }, multiPlaylist: boolean): boolean {
+  const target = playlists.find(p => p.id === s.playlist);
+  switch (s.type) {
+    case 'artist': return artistRules[s.value]?.playlist === s.playlist;
+    case 'multi_playlist': return multiPlaylist;
+    case 'add_genre': return !!target?.genre_names.includes(s.value);
+    case 'exclude_genre': return !!target?.exclude_genres.includes(s.value);
+    case 'album_keyword': return !!target?.album_keywords.includes(s.value);
+    case 'title_keyword': return !!target?.title_keywords.includes(s.value);
+    case 'move_above': {
+      const ids = playlists.map(p => p.id);
+      return ids.indexOf(s.playlist) >= 0 && ids.indexOf(s.playlist) < ids.indexOf(s.value);
+    }
+  }
+}
+
 /** Rules after applying a suggestion. Artist and multi-playlist suggestions are handled by the caller. */
 export function applySuggestion(playlists: GenrePlaylist[], s: RuleSuggestion): GenrePlaylist[] {
   const list = playlists.map(p => ({ ...p }));

@@ -134,7 +134,7 @@ class Classifier:
         return max(candidates, key=lambda entry: self.similarity(entry['id'], genres))
 
     def classify(self, track, evaluating=False):
-        """Classify a track. evaluating=True ignores the track's current place and remembered choices."""
+        """Classify a track. evaluating=True ignores the track's current place (to measure the rules)."""
         artist = track['artists'][0]
         album = (track.get('album') or {}).get('name', '')
         result = {
@@ -156,7 +156,7 @@ class Classifier:
             return {**result, 'playlist': self.track_index[track['id']], 'status': 'already',
                     'reason': 'already in a genre playlist'}
 
-        rule = None if evaluating else self.config['artist_rules'].get(artist.get('id'))
+        rule = self.config['artist_rules'].get(artist.get('id'))
         if rule and rule['playlist'] in self.by_id:
             return {**result, 'playlist': rule['playlist'], 'status': 'auto', 'reason': 'remembered artist choice'}
 

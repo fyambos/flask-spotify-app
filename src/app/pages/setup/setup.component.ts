@@ -35,6 +35,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   editing: GenrePlaylist | null = null;
   saving = false;
   applied = new Set<string>();
+  artistRules: { [id: string]: { name: string; playlist: string } } = {};
   rulesEdited = false;
   evaluation: JobState | null = null;
   private poll: any = null;
@@ -56,6 +57,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       config.playlists.forEach(p => { this.selected.add(p.playlist_id); this.initiallySelected.add(p.playlist_id); });
       this.fallbackGenre = config.fallback_genre;
       this.multiPlaylist = config.multi_playlist;
+      this.artistRules = config.artist_rules;
     });
     this.playlistService.getSetupAnalysis().subscribe(state => {
       if (state.job.running) {
@@ -155,7 +157,9 @@ export class SetupComponent implements OnInit, OnDestroy {
   applyRuleSuggestion(s: RuleSuggestion): void {
     this.applied = new Set(this.applied).add(suggestionKey(s));
     if (s.type === 'artist') {
-      this.playlistService.addArtistRule(s.value, s.artist || '', s.playlist).subscribe();
+      this.playlistService.addArtistRule(s.value, s.artist || '', s.playlist).subscribe(() => {
+        this.artistRules = { ...this.artistRules, [s.value]: { name: s.artist || '', playlist: s.playlist } };
+      });
       return;
     }
     if (s.type === 'multi_playlist') {

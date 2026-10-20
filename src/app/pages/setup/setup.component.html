@@ -218,6 +218,7 @@
           </button>
         </div>
         <app-genre-list [playlists]="proposal" [stats]="stats" [spotify]="byId" [applied]="applied"
+                        [artistRules]="artistRules" [multiPlaylist]="multiPlaylist"
                         (reordered)="reorderProposal($event)" (edit)="editing = $event" (remove)="removeFromProposal($event)"
                         (suggest)="applyRuleSuggestion($event)">
         </app-genre-list>

@@ -15,6 +15,8 @@ export class GenresComponent implements OnInit, OnDestroy {
   editing: GenrePlaylist | null = null;
   loading = true;
   applied = new Set<string>();
+  artistRules: { [id: string]: { name: string; playlist: string } } = {};
+  multiPlaylist = false;
   private poll: any = null;
 
   constructor(private playlistService: PlaylistService, private dialog: MatDialog) { }
@@ -22,6 +24,8 @@ export class GenresComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.playlistService.getConfig().subscribe(config => {
       this.playlists = config.playlists;
+      this.artistRules = config.artist_rules;
+      this.multiPlaylist = config.multi_playlist;
       this.loading = false;
     });
     this.playlistService.getPlaylists().subscribe(playlists => {
@@ -47,11 +51,16 @@ export class GenresComponent implements OnInit, OnDestroy {
   applyRuleSuggestion(s: RuleSuggestion): void {
     this.applied = new Set(this.applied).add(suggestionKey(s));
     if (s.type === 'artist') {
-      this.playlistService.addArtistRule(s.value, s.artist || '', s.playlist).subscribe();
+      this.playlistService.addArtistRule(s.value, s.artist || '', s.playlist).subscribe(() => {
+        this.artistRules = { ...this.artistRules, [s.value]: { name: s.artist || '', playlist: s.playlist } };
+      });
       return;
     }
     if (s.type === 'multi_playlist') {
-      this.playlistService.updateSettings({ multi_playlist: true }).subscribe(() => this.refreshAccuracy());
+      this.playlistService.updateSettings({ multi_playlist: true }).subscribe(() => {
+        this.multiPlaylist = true;
+        this.refreshAccuracy();
+      });
       return;
     }
     const updated = applySuggestion(this.playlists, s);

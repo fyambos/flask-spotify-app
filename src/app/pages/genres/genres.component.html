@@ -44,6 +44,7 @@
 
 <div *ngIf="playlists.length" class="mt-6">
   <app-genre-list [playlists]="playlists" [stats]="stats" [spotify]="spotify" [applied]="applied"
+                  [artistRules]="artistRules" [multiPlaylist]="multiPlaylist"
                   (reordered)="reorder($event)" (edit)="editing = $event" (remove)="remove($event)"
                   (suggest)="applyRuleSuggestion($event)">
   </app-genre-list>

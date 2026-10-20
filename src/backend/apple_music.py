@@ -4,7 +4,8 @@
 - writes every playlist in Spotify order, reusing the Apple Music playlist with the same
   name (it keeps its cover and folder); missing ones are created (genre playlists in
   the "Genres" folder if it exists, the others at the top level)
-- removes the "Music Sorter" folder made by earlier versions
+- puts each playlist in its folder (Settings > Folders, "Music Sorter" by default) and
+  removes the folders it no longer uses once they are empty
 - removes from Apple Music the songs that are no longer in the local library
 
 Uses AppleScript (osascript). macOS asks once for permission to control Music.
@@ -21,7 +22,6 @@ from pathlib import Path
 import config_store
 import library
 
-OLD_FOLDER = 'Music Sorter'
 GENRES_FOLDER = 'Genres'
 
 
@@ -102,10 +102,23 @@ on run argv
 end run
 '''
 
-DELETE_OLD_FOLDER = r'''
+# Lines: names of folders to delete if they are empty.
+DELETE_EMPTY_FOLDERS = r'''
 on run argv
+    set lines_ to paragraphs of (read (POSIX file (item 1 of argv)) as «class utf8»)
     tell application "Music"
-        if exists folder playlist "''' + OLD_FOLDER + r'''" then delete folder playlist "''' + OLD_FOLDER + r'''"
+        repeat with l in lines_
+            set n to l as text
+            if n is not "" and (exists folder playlist n) then
+                set used to false
+                repeat with p in (every playlist)
+                    try
+                        if name of parent of p is n then set used to true
+                    end try
+                end repeat
+                if not used then delete folder playlist n
+            end if
+        end repeat
     end tell
 end run
 '''
@@ -198,8 +211,7 @@ def _existing_playlists():
     result = []
     for line in _run(LIST_PLAYLISTS, '').splitlines():
         parts = line.split('\t')
-        if (len(parts) >= 5 and parts[3] == 'user playlist' and parts[4] in ('none', 'missing value', '')
-                and parts[2] != OLD_FOLDER):
+        if len(parts) >= 5 and parts[3] == 'user playlist' and parts[4] in ('none', 'missing value', ''):
             result.append((parts[0], parts[1], parts[2]))
     return result
 
@@ -263,15 +275,13 @@ def update(sp=None, progress=None):
                 r.pop('apple_id', None)
         library.save_library(lib)
 
-    progress(step='Removing the old Music Sorter folder')
-    _run(DELETE_OLD_FOLDER, '')
-
     progress(step='Writing playlists in Apple Music')
     existing = _existing_playlists()
     parents = {pid: parent for pid, _, parent in existing}
     links = lib.setdefault('apple_playlists', {})
     genre_ids = {p['playlist_id'] for p in config['playlists']}
-    folders = dict(config.get('apple_folders') or {})
+    folders = dict(config.get('playlist_folders') or {})
+    default = config.get('default_folder') or ''
     lines = []
     for spotify_id, info in plan['playlists'].items():
         ids = [tracks[t]['apple_id'] for t in info['track_ids'] if tracks.get(t, {}).get('apple_id')]
@@ -279,15 +289,20 @@ def update(sp=None, progress=None):
         if spotify_id not in folders:
             # First time: keep the folder the playlist already has in Apple Music.
             folders[spotify_id] = parents.get(pid) or (GENRES_FOLDER if spotify_id in genre_ids else '')
-        lines.append(f"P\t{spotify_id}\t{pid}\t{folders[spotify_id]}\t{info['name']}\t{len(ids)}")
+        lines.append(f"P\t{spotify_id}\t{pid}\t{folders[spotify_id] or default}\t{info['name']}\t{len(ids)}")
         lines.extend(f'T\t{track}' for track in ids)
         if pid:
             links[spotify_id] = pid
-    config_store.update_settings({'apple_folders': folders})
+    config_store.update_settings({'playlist_folders': folders})
     for line in _run(WRITE_PLAYLISTS, '\n'.join(lines)).splitlines():
         parts = line.split('\t')
         if len(parts) == 3 and parts[0] == 'C':
             links[parts[1]] = parts[2].strip()
+    used = {f or default for f in folders.values()} - {''}
+    unused = set(lib.get('apple_folders_used', [])) - used
+    if unused:
+        _run(DELETE_EMPTY_FOLDERS, '\n'.join(unused))
+    lib['apple_folders_used'] = sorted(used)
     library.save_library(lib)
 
     progress(step='Done')

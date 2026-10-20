@@ -17,6 +17,7 @@ import { ConfirmDialogComponent } from './components/confirm-dialog/confirm-dial
 import { ChipInputComponent } from './components/chip-input/chip-input.component';
 import { GenreListComponent } from './components/genre-list/genre-list.component';
 import { RuleEditorComponent } from './components/rule-editor/rule-editor.component';
+import { PlaylistFoldersComponent } from './components/playlist-folders/playlist-folders.component';
 import { LikedSongsComponent } from './pages/liked-songs/liked-songs.component';
 import { SetupComponent } from './pages/setup/setup.component';
 import { GenresComponent } from './pages/genres/genres.component';
@@ -31,6 +32,7 @@ import { LibraryComponent } from './pages/library/library.component';
     ChipInputComponent,
     GenreListComponent,
     RuleEditorComponent,
+    PlaylistFoldersComponent,
     LikedSongsComponent,
     SetupComponent,
     GenresComponent,

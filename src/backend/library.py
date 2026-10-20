@@ -385,21 +385,27 @@ def tag_file(path, genre=None, spotify_id=None):
 
 
 def write_playlists(root, contents, library):
-    """One .m3u8 per playlist, with paths relative to the Playlists folder."""
-    folder = root / PLAYLISTS_FOLDER
-    folder.mkdir(parents=True, exist_ok=True)
+    """One .m3u8 per playlist in Playlists/<folder>/, with paths relative to that folder."""
+    config = config_store.load_config()
+    folders = config.get('playlist_folders') or {}
+    default = config.get('default_folder') or ''
+    base_dir = root / PLAYLISTS_FOLDER
+    base_dir.mkdir(parents=True, exist_ok=True)
     tracks = library['tracks']
     previous = library.get('playlists', {})
     written, used = {}, set()
 
     for playlist_id, info in contents.items():
+        sub = safe_name(folders.get(playlist_id) or default) if (folders.get(playlist_id) or default) else ''
+        folder = base_dir / sub if sub else base_dir
+        folder.mkdir(parents=True, exist_ok=True)
         base = safe_name(info['name'])
         name, n = base, 2
-        while name.lower() in used:
+        while f'{sub}/{name}'.lower() in used:
             name = f'{base} ({n})'
             n += 1
-        used.add(name.lower())
-        filename = f'{name}.m3u8'
+        used.add(f'{sub}/{name}'.lower())
+        filename = f'{sub}/{name}.m3u8' if sub else f'{name}.m3u8'
 
         lines = ['#EXTM3U', f'#PLAYLIST:{info["name"].strip(INVISIBLE + " ")}']
         for track_id in info['track_ids']:
@@ -409,16 +415,19 @@ def write_playlists(root, contents, library):
             rel = os.path.relpath(root / record['path'], folder).replace(os.sep, '/')
             lines.append(f"#EXTINF:{record.get('duration', -1)},{', '.join(record.get('artists', []))} - {record.get('title', '')}")
             lines.append(rel)
-        (folder / filename).write_text('\n'.join(lines) + '\n', encoding='utf-8')
+        (base_dir / filename).write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
         old = previous.get(playlist_id)
         if old and old != filename:
-            (folder / old).unlink(missing_ok=True)
+            (base_dir / old).unlink(missing_ok=True)
         written[playlist_id] = filename
 
     for playlist_id, old in previous.items():
         if playlist_id not in written and old not in written.values():
-            (folder / old).unlink(missing_ok=True)
+            (base_dir / old).unlink(missing_ok=True)
+    for sub in base_dir.iterdir():
+        if sub.is_dir() and not any(f for f in sub.iterdir() if f.name != '.DS_Store'):
+            shutil.rmtree(sub, ignore_errors=True)
     library['playlists'] = written
 
 

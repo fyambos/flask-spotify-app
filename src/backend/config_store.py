@@ -24,9 +24,13 @@ DEFAULT_CONFIG = {
     'youtube_cookies': '',
     # macOS: update Apple Music at the end of each library sync.
     'apple_music_auto': True,
-    # Apple Music folder of each playlist ({spotify playlist id: folder name, '' = top level}).
-    # The Spotify Web API does not give playlist folders, so they are set here.
-    'apple_folders': {},
+    # Folder of each playlist ({spotify playlist id: folder name}), used for Apple Music and
+    # for the .m3u8 files. The Spotify Web API does not give playlist folders, so they are set here.
+    'playlist_folders': {},
+    # Folder of the playlists that have none.
+    'default_folder': 'Music Sorter',
+    # Folders in display order (also keeps folders that have no playlist yet).
+    'folders': [],
     # Genre that unmatched tracks go to once you review them (must be one of the playlists).
     'fallback_genre': 'Other',
     # Use the genre playlists a track's artist is already in.
@@ -76,6 +80,8 @@ def _migrate_from_firestore():
 
 
 def _normalize(config):
+    if 'apple_folders' in config:  # renamed
+        config.setdefault('playlist_folders', config.pop('apple_folders'))
     config = {**DEFAULT_CONFIG, **config}
     for entry in config['playlists']:
         for field in RULE_FIELDS:
@@ -149,7 +155,7 @@ def set_artist_rule(artist_id, artist_name, entry_id):
 
 def update_settings(changes):
     config = load_config()
-    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'removed', 'youtube_cookies', 'apple_music_auto', 'apple_folders'):
+    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'removed', 'youtube_cookies', 'apple_music_auto', 'playlist_folders', 'default_folder', 'folders'):
         if key in changes:
             config[key] = changes[key]
     save_config(config)

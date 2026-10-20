@@ -23,7 +23,9 @@ export interface AppConfig {
   removed: { mode: 'keep' | 'move' | 'delete'; folder: string };
   youtube_cookies: string;
   apple_music_auto: boolean;
-  apple_folders: { [spotifyPlaylistId: string]: string };
+  playlist_folders: { [spotifyPlaylistId: string]: string };
+  default_folder: string;
+  folders: string[];
   artist_rules: { [artistId: string]: { name: string; playlist: string } };
   playlists: GenrePlaylist[];
 }

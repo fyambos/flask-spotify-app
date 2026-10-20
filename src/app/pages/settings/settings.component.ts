@@ -3,8 +3,6 @@ import { MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent } from 'src/app/components/confirm-dialog/confirm-dialog.component';
 import { AppConfig, PlaylistService, SpotifyPlaylist } from 'src/app/services/playlist.service';
 
-const INVISIBLE = /^[\s\u2800\u3164\u200b]+|[\s\u2800\u3164\u200b]+$/g;
-
 @Component({
   selector: 'app-settings',
   templateUrl: './settings.component.html',
@@ -16,9 +14,6 @@ export class SettingsComponent implements OnInit {
   sortSource = '';
   sorting = false;
   sortMessage = '';
-  playlistNames: { [id: string]: string } = {};
-  appleFolders: { id: string; name: string }[] = [];
-  folderNames: string[] = [];
   rememberedArtists: { id: string; name: string; playlist: string }[] = [];
 
   constructor(private playlistService: PlaylistService, private dialog: MatDialog) { }
@@ -29,10 +24,7 @@ export class SettingsComponent implements OnInit {
       this.computeLists();
     });
     this.playlistService.getPlaylists().subscribe(playlists => this.playlists = playlists.filter(p => p.owned));
-    this.playlistService.getLibrary().subscribe(state => {
-      this.playlistNames = state.playlist_names;
-      this.computeLists();
-    });
+
   }
 
   /** Lists shown on the page, computed once (not at every change detection). */
@@ -42,11 +34,6 @@ export class SettingsComponent implements OnInit {
     this.rememberedArtists = Object.entries(config.artist_rules).map(([id, rule]) => ({
       id, name: rule.name, playlist: config.playlists.find(p => p.id === rule.playlist)?.name || '—',
     })).sort((a, b) => a.name.localeCompare(b.name));
-    this.appleFolders = Object.entries(this.playlistNames)
-      .map(([id, name]) => ({ id, name: name.replace(INVISIBLE, '') }))
-      .sort((a, b) => (config.apple_folders[a.id] || '').localeCompare(config.apple_folders[b.id] || '')
-        || a.name.localeCompare(b.name));
-    this.folderNames = [...new Set(Object.values(config.apple_folders || {}).filter(Boolean))].sort();
   }
 
   trackById(_: number, item: { id: string }): string {
@@ -57,16 +44,6 @@ export class SettingsComponent implements OnInit {
     if (!this.config) return;
     const { music_dir, audio_format, artist_history, multi_playlist, non_liked, removed, youtube_cookies } = this.config;
     this.playlistService.updateSettings({ music_dir, audio_format, artist_history, multi_playlist, non_liked, removed, youtube_cookies }).subscribe(() => {
-      this.savedAt = Date.now();
-      setTimeout(() => this.savedAt = 0, 2000);
-    });
-  }
-
-  setFolder(id: string, folder: string): void {
-    if (!this.config) return;
-    this.config.apple_folders = { ...this.config.apple_folders, [id]: folder.trim() };
-    this.folderNames = [...new Set(Object.values(this.config.apple_folders).filter(Boolean))].sort();
-    this.playlistService.updateSettings({ apple_folders: this.config.apple_folders }).subscribe(() => {
       this.savedAt = Date.now();
       setTimeout(() => this.savedAt = 0, 2000);
     });

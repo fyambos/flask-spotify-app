@@ -144,6 +144,11 @@
   </button>
 </section>
 
+<!-- Folders -->
+<section *ngIf="state && (state.playlist_names | keyvalue).length" class="mt-10">
+  <app-playlist-folders [names]="state.playlist_names"></app-playlist-folders>
+</section>
+
 <!-- Devices -->
 <section class="mt-10">
   <h2 class="font-semibold">On your devices</h2>

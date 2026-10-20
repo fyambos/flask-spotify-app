@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
+import requests
 
 import apple_music
 import config_store
@@ -14,7 +15,7 @@ import library
 import setup_analysis
 import sorter
 from genres import GenreResolver
-from spotify_client import (add_to_playlist, create_client, my_playlists, playlist_meta,
+from spotify_client import (SpotifyLimitError, add_to_playlist, create_client, my_playlists, playlist_meta,
                             playlist_tracks, remove_from_playlist)
 
 load_dotenv()
@@ -35,6 +36,12 @@ apple_job = sorter.Job(apple_music.update)
 def handle_error(e):
     if isinstance(e, HTTPException):
         return e
+    if isinstance(e, SpotifyLimitError):
+        app.logger.warning('%s %s: %s', request.method, request.path, e)
+        return jsonify({'error': str(e)}), 503
+    if isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+        app.logger.warning('%s %s: Spotify did not respond (%s)', request.method, request.path, type(e).__name__)
+        return jsonify({'error': 'Spotify did not respond. Try again in a moment.'}), 503
     app.logger.exception(e)
     return jsonify({'error': str(e)}), 400
 

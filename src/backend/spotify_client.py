@@ -28,9 +28,8 @@ _snapshots = {'at': 0, 'value': {}}
 
 class SpotifyLimitError(RuntimeError):
     def __init__(self, retry_after):
-        hours = retry_after / 3600
-        when = f'{hours:.0f} h' if hours >= 1 else f'{retry_after / 60:.0f} min'
-        super().__init__(f'Spotify request limit reached for today. Try again in about {when}.')
+        until = time.strftime('%H:%M', time.localtime(time.time() + retry_after))
+        super().__init__(f'Spotify request limit reached for today. Try again after {until}.')
         self.retry_after = retry_after
 
 

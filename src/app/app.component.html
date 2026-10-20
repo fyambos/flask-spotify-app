@@ -5,6 +5,14 @@
   </div>
 </div>
 
+<div *ngIf="!backendDown && (notice.message$ | async) as message" class="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
+  <div class="card flex max-w-xl items-start gap-3 px-4 py-2.5 text-sm text-zinc-700">
+    <span class="mt-0.5 inline-flex shrink-0 text-amber-500"><lucide-icon name="alert-triangle" [size]="16"></lucide-icon></span>
+    <span class="flex-1">{{ message }}</span>
+    <button class="icon-btn -my-1 -mr-2 h-7 w-7" (click)="notice.clear()" aria-label="Close"><lucide-icon name="x" [size]="14"></lucide-icon></button>
+  </div>
+</div>
+
 <!-- Setup assistant: full screen, no navigation -->
 <router-outlet *ngIf="inSetup"></router-outlet>
 

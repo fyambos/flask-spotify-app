@@ -303,6 +303,10 @@ class Job:
         try:
             self.target(sp, self._progress, **kwargs)
         except Exception as e:  # reported to the UI
-            self.state['error'] = str(e)
+            import requests
+            if isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+                self.state['error'] = 'Spotify did not respond. Try again in a moment.'
+            else:
+                self.state['error'] = str(e)
         finally:
             self.state['running'] = False

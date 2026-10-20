@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { PlaylistService, SetupStatus } from './services/playlist.service';
+import { NoticeService } from './services/notice.service';
 
 @Component({
   selector: 'app-root',
@@ -20,7 +21,7 @@ export class AppComponent implements OnInit {
     { path: '/settings', label: 'Settings', icon: 'settings' },
   ];
 
-  constructor(private playlistService: PlaylistService, private router: Router) { }
+  constructor(private playlistService: PlaylistService, private router: Router, public notice: NoticeService) { }
 
   ngOnInit(): void {
     this.router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe((e) => {

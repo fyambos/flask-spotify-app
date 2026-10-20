@@ -29,6 +29,9 @@
     <div class="h-full rounded-full bg-zinc-900 transition-all duration-500"
          [style.width.%]="state?.job?.total ? 100 * (state?.job?.done || 0) / (state?.job?.total || 1) : 5"></div>
   </div>
+  <ul *ngIf="state?.job?.current?.length" class="mt-3 space-y-0.5 text-xs text-zinc-400">
+    <li *ngFor="let name of state?.job?.current" class="truncate">{{ name }}</li>
+  </ul>
 </div>
 <div *ngIf="state?.job?.error" class="mt-6 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700 ring-1 ring-rose-600/10">{{ state?.job?.error }}</div>
 

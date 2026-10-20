@@ -95,6 +95,7 @@ export interface JobState {
   step?: string;
   done?: number;
   total?: number;
+  current?: string[];
   error?: string | null;
 }
 

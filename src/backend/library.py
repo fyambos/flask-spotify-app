@@ -32,7 +32,6 @@ LIKED_PLAYLIST_ID = 'liked'
 LIKED_PLAYLIST_NAME = 'Liked Songs'
 FILE_TEMPLATE = '{artists} - {title}.{output-ext}'
 FILE_TEMPLATE_WITH_ALBUM = '{artists} - {title} ({album}).{output-ext}'
-BATCH_SIZE = 8
 INVISIBLE = '⠀ㅤ​'
 
 
@@ -230,7 +229,7 @@ def sync(sp, progress=None, apply=True):
         record['removed_at'] = datetime.now().isoformat(timespec='seconds')
     save_library(library)
 
-    progress(step='Writing playlists')
+    progress(step='Writing playlists', current=[])
     write_playlists(root, plan['playlists'], library)
     save_library(library)
 
@@ -256,7 +255,13 @@ def _move(root, record, folder):
     record['folder'] = folder
 
 
+DOWNLOAD_WORKERS = 4
+
+
 def _download_all(sp, root, config, plan, library, progress):
+    """Download songs one by one on a few workers, so progress moves at every song."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
     from spotdl.download.downloader import Downloader
     from spotdl.types.song import Song
     from spotdl.utils.formatter import create_file_name
@@ -268,64 +273,79 @@ def _download_all(sp, root, config, plan, library, progress):
     resolver = GenreResolver(sp)
 
     ext = config['audio_format']
-    downloader = Downloader({
+    settings = {
         'output': FILE_TEMPLATE,
         'format': ext,
         # Keep the bitrate of the source (YouTube Music without Premium: about 130 kbps).
         'bitrate': 'auto',
         'audio_providers': ['youtube-music', 'youtube'],
         'lyrics_providers': [],
-        'threads': 4,
+        'threads': 1,
         'overwrite': 'skip',
         'simple_tui': True,
         'print_errors': False,
         'log_level': 'CRITICAL',
         # With YouTube Music Premium cookies, the 256 kbps AAC source becomes available.
         'cookie_file': os.path.expanduser(config['youtube_cookies']) if config.get('youtube_cookies') else None,
-    })
+    }
     tracks = library['tracks']
-    by_folder = defaultdict(list)
-    for tid in ids:
-        by_folder[plan['desired'][tid]].append(tid)
+    local = threading.local()
+    lock = threading.Lock()
+    state = {'done': 0, 'current': []}
 
-    done = 0
-    for folder, folder_ids in by_folder.items():
+    # Genres are looked up before starting (the resolver and its cache are not thread-safe).
+    songs = {}
+    for tid in ids:
+        data = dict(plan['meta'][tid])
+        data['genres'] = [artist_genre(resolver, data['artist_id'], data['artist'])]
+        songs[tid] = Song.from_dict(data)
+    resolver.save()
+
+    def label(tid):
+        info = plan['info'].get(tid, {})
+        return f"{', '.join(a for a in info.get('artists', []) if a)} - {info.get('title', '')}"
+
+    def report():
+        progress(step='Downloading songs', done=state['done'], total=len(ids), current=list(state['current']))
+
+    def work(tid):
+        if not hasattr(local, 'downloader'):
+            local.downloader = Downloader(dict(settings))
+        folder = plan['desired'][tid]
         folder_dir = root / folder
         folder_dir.mkdir(parents=True, exist_ok=True)
-        for start in range(0, len(folder_ids), BATCH_SIZE):
-            batch = folder_ids[start:start + BATCH_SIZE]
-            songs = {}
-            for tid in batch:
-                data = dict(plan['meta'][tid])
-                data['genres'] = [artist_genre(resolver, data['artist_id'], data['artist'])]
-                songs[tid] = Song.from_dict(data)
-
+        song = songs[tid]
+        with lock:
+            state['current'].append(label(tid))
+            report()
             # Two different songs with the same artist and title: add the album to the name.
             owners = {r.get('path'): t for t, r in tracks.items()}
-            plain, with_album = [], []
-            for tid, song in songs.items():
-                rel = str((folder_dir / create_file_name(song, FILE_TEMPLATE, ext)).relative_to(root))
-                (with_album if owners.get(rel) not in (None, tid) else plain).append(tid)
+            rel = str((folder_dir / create_file_name(song, FILE_TEMPLATE, ext)).relative_to(root))
+            template = FILE_TEMPLATE_WITH_ALBUM if owners.get(rel) not in (None, tid) else FILE_TEMPLATE
+        local.downloader.settings['output'] = str(folder_dir / template)
+        try:
+            _, path = local.downloader.download_song(song)
+        except Exception:
+            path = None
+        info = plan['info'].get(tid, {})
+        with lock:
+            if path and Path(path).exists():
+                tag_file(Path(path), spotify_id=tid)
+                tracks[tid] = {**info, 'path': str(Path(path).relative_to(root)), 'folder': folder,
+                               'status': 'ok', 'source_url': song.download_url,
+                               'downloaded_at': datetime.now().isoformat(timespec='seconds')}
+            else:
+                tracks[tid] = {**info, 'path': None, 'folder': folder, 'status': 'failed',
+                               'error': 'Not found on YouTube Music'}
+            state['current'].remove(label(tid))
+            state['done'] += 1
+            report()
+            if state['done'] % 10 == 0:
+                save_library(library)
 
-            for template, group in ((FILE_TEMPLATE, plain), (FILE_TEMPLATE_WITH_ALBUM, with_album)):
-                if not group:
-                    continue
-                downloader.settings['output'] = str(folder_dir / template)
-                results = downloader.download_multiple_songs([songs[t] for t in group])
-                for song, path in results:
-                    tid = song.song_id
-                    info = plan['info'].get(tid, {})
-                    if path and Path(path).exists():
-                        tag_file(Path(path), spotify_id=tid)
-                        tracks[tid] = {**info, 'path': str(Path(path).relative_to(root)), 'folder': folder,
-                                       'status': 'ok', 'source_url': song.download_url,
-                                       'downloaded_at': datetime.now().isoformat(timespec='seconds')}
-                    else:
-                        tracks[tid] = {**info, 'path': None, 'folder': folder, 'status': 'failed',
-                                       'error': 'Not found on YouTube Music'}
-            done += len(batch)
-            progress(step=f'Downloading songs', done=done, total=len(ids))
-            save_library(library)
+    with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as pool:
+        list(pool.map(work, ids))
+    save_library(library)
 
 
 def artist_genre(resolver, artist_id, artist_name):

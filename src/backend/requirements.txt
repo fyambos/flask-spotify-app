@@ -1,0 +1,7 @@
+flask>=3.0
+flask-cors>=4.0
+python-dotenv>=1.0
+requests>=2.31
+spotipy>=2.24
+spotdl>=4.5.2
+mutagen>=1.47

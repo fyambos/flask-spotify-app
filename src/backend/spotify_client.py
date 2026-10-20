@@ -12,6 +12,7 @@ from config_store import DATA_DIR
 
 SCOPE = ' '.join([
     'user-library-read',
+    'user-library-modify',
     'playlist-read-private',
     'playlist-read-collaborative',
     'playlist-modify-private',
@@ -75,6 +76,20 @@ def remove_from_playlist(sp, playlist_id, track_ids):
     uris = [{'uri': f'spotify:track:{tid}'} for tid in track_ids]
     for i in range(0, len(uris), 100):
         sp._delete(f'playlists/{playlist_id}/items', payload={'items': uris[i:i + 100]})
+
+
+def like_tracks(sp, track_ids):
+    """Save tracks to Liked Songs (PUT /me/library, which replaced PUT /me/tracks in 2026)."""
+    uris = [f'spotify:track:{tid}' for tid in track_ids]
+    for i in range(0, len(uris), 40):
+        sp._put('me/library', uris=','.join(uris[i:i + 40]))
+
+
+def unlike_tracks(sp, track_ids):
+    """Remove tracks from Liked Songs (DELETE /me/library)."""
+    uris = [f'spotify:track:{tid}' for tid in track_ids]
+    for i in range(0, len(uris), 40):
+        sp._delete('me/library', uris=','.join(uris[i:i + 40]))
 
 
 def my_playlists(sp):

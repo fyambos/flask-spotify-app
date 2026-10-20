@@ -197,7 +197,7 @@ export interface LibraryState {
   failed: LibraryTrack[];
   removed: LibraryTrack[];
   playlists: number;
-  plan: { generated_at: string; to_download: number; to_move: number; to_remove: number; playlists: number; moves_folder: boolean } | null;
+  plan: { generated_at: string; to_download: number; to_move: number; to_remove: number; wrong_length: number; playlists: number; moves_folder: boolean } | null;
 }
 
 export interface LikesState {

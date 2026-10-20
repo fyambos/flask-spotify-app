@@ -191,10 +191,15 @@ def build_plan(sp, progress, catalog=None):
             desired[tid] = spelling.setdefault(folder.lower(), folder)
 
     old_root = Path(library['root'])
-    to_download, to_move, to_remove = [], [], []
+    to_download, to_move, to_remove, wrong = [], [], [], []
     for track_id, folder in desired.items():
         record = library['tracks'].get(track_id)
         exists = record and record.get('path') and (old_root / record['path']).exists()
+        expected = round((catalog['tracks'][track_id].get('duration_ms') or 0) / 1000) or (record or {}).get('duration') or 0
+        if exists and expected and _wrong_length(expected, _length(old_root / record['path'])):
+            # A file of another version (downloaded before the length check existed): downloaded again.
+            wrong.append(track_id)
+            exists = False
         if not exists:
             to_download.append(track_id)
         elif record['folder'] != folder or record['status'] != 'ok' or old_root != root:
@@ -219,6 +224,7 @@ def build_plan(sp, progress, catalog=None):
         'to_download': to_download,
         'to_move': to_move,
         'to_remove': to_remove,
+        'wrong_length': wrong,
         'playlists': contents,
         'meta': {tid: _song_data(catalog['tracks'][tid]) for tid in to_download},
         'info': {tid: _track_info(catalog['tracks'][tid]) for tid in desired},
@@ -305,7 +311,23 @@ def sync(sp, progress=None, apply=True, catalog=None):
         old_root = root
     save_library(library)
 
+    # Files of another version: set aside, removed only once the right version is downloaded.
+    replaced = {}
+    for track_id in plan.get('wrong_length', []):
+        record = tracks.get(track_id)
+        if record and record.get('path') and (root / record['path']).exists():
+            old = root / record['path']
+            aside = old.with_name(old.name + '.old')
+            old.replace(aside)
+            replaced[track_id] = (dict(record), old, aside)
     _download_all(sp, root, config, plan, library, progress)
+    for track_id, (record, old, aside) in replaced.items():
+        if tracks.get(track_id, {}).get('status') == 'ok':
+            aside.unlink(missing_ok=True)
+        else:
+            aside.replace(old)  # the right version was not found: the old file stays
+            tracks[track_id] = record
+    save_library(library)
 
     removed = config['removed']
     for i, track_id in enumerate(plan['to_remove'], 1):
@@ -449,12 +471,22 @@ def _download_all(sp, root, config, plan, library, progress):
             rel = str((folder_dir / create_file_name(song, FILE_TEMPLATE, ext)).relative_to(root))
             template = FILE_TEMPLATE_WITH_ALBUM if owners.get(rel) not in (None, tid) else FILE_TEMPLATE
         local.downloader.settings['output'] = str(folder_dir / template)
-        path = None
+        path, wrong = None, False
+        expected = song.duration or 0
         for attempt in range(DOWNLOAD_ATTEMPTS):
             try:
                 _, path = local.downloader.download_song(song)
             except Exception:
                 path = None
+            if path and expected and _wrong_length(expected, _length(Path(path))):
+                # Another version (a medley, a 1-hour loop...): not kept.
+                Path(path).unlink(missing_ok=True)
+                path, wrong = None, True
+                own = song.download_url
+                _use_youtube_music_match(local, song)
+                if song.download_url == own:
+                    break  # our own match is the one with the wrong length
+                continue
             if path:
                 break
             if not song.download_url:
@@ -466,15 +498,19 @@ def _download_all(sp, root, config, plan, library, progress):
             time.sleep(3 * (attempt + 1))
         info = {**plan['info'].get(tid, {})}
         info['duration'] = info.get('duration') or round(song.duration or 0)
+        if not any(info.get('artists') or []):
+            info['artists'] = [a for a in song.artists if a]  # songs without artist in the file: the matched one
         with lock:
             if path and Path(path).exists():
-                tag_file(Path(path), spotify_id=tid)
+                tag_file(Path(path), spotify_id=tid, title=song.name, artist=', '.join(info['artists']),
+                         album=song.album_name)
                 tracks[tid] = {**info, 'path': str(Path(path).relative_to(root)), 'folder': folder,
                                'status': 'ok', 'source_url': song.download_url,
                                'downloaded_at': datetime.now().isoformat(timespec='seconds')}
             else:
                 tracks[tid] = {**info, 'path': None, 'folder': folder, 'status': 'failed',
-                               'error': 'Not found on YouTube Music' if not song.download_url else 'Could not be downloaded'}
+                               'error': 'Wrong version found on YouTube Music' if wrong
+                               else 'Not found on YouTube Music' if not song.download_url else 'Could not be downloaded'}
                 # Removed at the end: another worker may be writing a song of the same album there.
                 failed_folders.add(folder_dir)
             state['current'].remove(label(tid))
@@ -562,9 +598,24 @@ def artist_genre(resolver, artist_id, artist_name):
     return genres[0] if genres else ''
 
 
-def tag_file(path, genre=None, spotify_id=None):
-    """Write the genre and the Spotify id into the file's tags."""
-    from mutagen.id3 import ID3, ID3NoHeaderError, TCON, TXXX
+def _length(path):
+    """Length of an audio file in seconds (0 if unreadable)."""
+    import mutagen
+    try:
+        return getattr(mutagen.File(path).info, 'length', 0) or 0
+    except Exception:
+        return 0
+
+
+def _wrong_length(expected, actual):
+    """A file much longer or shorter than the song: another version."""
+    return bool(actual) and abs(actual - expected) > max(60, expected * 0.5)
+
+
+def tag_file(path, genre=None, spotify_id=None, title=None, artist=None, album=None):
+    """Write the genre and the Spotify id into the file's tags, and the title, artist and album when
+    they are missing (spotdl can't write them for songs without an artist)."""
+    from mutagen.id3 import ID3, ID3NoHeaderError, TALB, TCON, TIT2, TPE1, TXXX
     from mutagen.mp4 import MP4, MP4FreeForm
 
     try:
@@ -573,6 +624,9 @@ def tag_file(path, genre=None, spotify_id=None):
                 tags = ID3(path)
             except ID3NoHeaderError:
                 tags = ID3()
+            for frame, value in (('TIT2', title), ('TPE1', artist), ('TALB', album)):
+                if value and not tags.getall(frame):
+                    tags.add({'TIT2': TIT2, 'TPE1': TPE1, 'TALB': TALB}[frame](encoding=3, text=[value]))
             if genre:
                 tags.setall('TCON', [TCON(encoding=3, text=[genre])])
             if spotify_id:
@@ -580,6 +634,9 @@ def tag_file(path, genre=None, spotify_id=None):
             tags.save(path)
         elif path.suffix.lower() in ('.m4a', '.mp4'):
             audio = MP4(path)
+            for key, value in (('\xa9nam', title), ('\xa9ART', artist), ('\xa9alb', album)):
+                if value and key not in audio:
+                    audio[key] = [value]
             if genre:
                 audio['\xa9gen'] = [genre]
             if spotify_id:
@@ -619,7 +676,9 @@ def write_playlists(root, contents, library):
             if not record or record['status'] != 'ok' or not record.get('path'):
                 continue
             rel = os.path.relpath(root / record['path'], folder).replace(os.sep, '/')
-            lines.append(f"#EXTINF:{record.get('duration', -1)},{', '.join(record.get('artists', []))} - {record.get('title', '')}")
+            artists = ', '.join(a for a in record.get('artists', []) if a)
+            label = f"{artists} - {record.get('title', '')}" if artists else record.get('title', '')
+            lines.append(f"#EXTINF:{record.get('duration', -1)},{label}")
             lines.append(rel)
         if len(lines) == 2:
             continue  # no downloaded song: no playlist file (an old one is removed below)
@@ -665,6 +724,7 @@ def summary():
             'to_download': len(plan['to_download']),
             'to_move': len(plan['to_move']),
             'to_remove': len(plan['to_remove']),
+            'wrong_length': len(plan.get('wrong_length', [])),
             'playlists': len(plan['playlists']),
             'moves_folder': Path(library['root']) != root,
         }

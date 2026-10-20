@@ -69,8 +69,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
   sync(): void {
     const plan = this.state?.plan;
     const moves = plan?.moves_folder ? ` Your files are moved to ${this.state?.music_dir}.` : '';
+    const wrong = plan?.wrong_length ? ` ${plan.wrong_length} of them replace files of another version (wrong length).` : '';
     const message = plan
-      ? `${plan.to_download} songs to download, ${plan.to_move} to move, ${plan.to_remove} removed. Playlists are rewritten in the Playlists folder.${moves}`
+      ? `${plan.to_download} songs to download, ${plan.to_move} to move, ${plan.to_remove} removed.${wrong} Playlists are rewritten in the Playlists folder.${moves}`
       : 'Downloads new songs, moves changed ones and rewrites the playlists.';
     this.dialog.open(ConfirmDialogComponent, {
       data: { title: 'Sync library?', message, confirmLabel: 'Sync' },

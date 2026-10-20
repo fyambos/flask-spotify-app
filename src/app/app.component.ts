@@ -15,9 +15,9 @@ export class AppComponent implements OnInit {
 
   nav = [
     { path: '/home', label: 'Home', icon: 'home' },
+    { path: '/library', label: 'Library', icon: 'hard-drive' },
     { path: '/likes', label: 'Liked Songs', icon: 'heart' },
     { path: '/genres', label: 'Genres', icon: 'list-music' },
-    { path: '/library', label: 'Library', icon: 'hard-drive' },
     { path: '/stats', label: 'Stats', icon: 'bar-chart-3' },
     { path: '/settings', label: 'Settings', icon: 'settings' },
   ];

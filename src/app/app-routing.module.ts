@@ -1,18 +1,21 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { SpotifySorterComponent } from './pages/spotify-sorter/spotify-sorter.component';
-import { SpotifyStatsComponent } from './pages/spotify-stats/spotify-stats.component';
-import { HomeComponent } from './pages/home/home.component';
-import { RecentlyPlayedComponent } from './components/recently-played/recently-played.component';
-import { TopTracksComponent } from './components/top-tracks/top-tracks.component';
+import { LikedSongsComponent } from './pages/liked-songs/liked-songs.component';
+import { SetupComponent } from './pages/setup/setup.component';
+import { GenresComponent } from './pages/genres/genres.component';
+import { StatsComponent } from './pages/stats/stats.component';
+import { SettingsComponent } from './pages/settings/settings.component';
+import { LibraryComponent } from './pages/library/library.component';
 
 const routes: Routes = [
-  { path: '' , redirectTo: '/home', pathMatch: 'full' },
-  { path: 'sorter', component: SpotifySorterComponent },
-  { path: 'stats', component: SpotifyStatsComponent },
-  { path: 'home', component: HomeComponent },
-  { path: 'recently-played', component: RecentlyPlayedComponent },
-  { path: 'top-tracks', component: TopTracksComponent },
+  { path: '', redirectTo: '/likes', pathMatch: 'full' },
+  { path: 'setup', component: SetupComponent },
+  { path: 'likes', component: LikedSongsComponent },
+  { path: 'genres', component: GenresComponent },
+  { path: 'library', component: LibraryComponent },
+  { path: 'stats', component: StatsComponent },
+  { path: 'settings', component: SettingsComponent },
+  { path: '**', redirectTo: '/likes' },
 ];
 
 @NgModule({

@@ -1,0 +1,52 @@
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="page-title">Genres</h1>
+    <p class="page-subtitle">Your playlists and associated rules. Drag to change the priority of the first match.</p>
+  </div>
+  <a routerLink="/setup" [queryParams]="{ step: 'choose' }" class="btn-outline">
+    <lucide-icon name="sparkles" [size]="16"></lucide-icon> Add playlists or re-learn rules
+  </a>
+</div>
+
+<div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl bg-white p-4 text-sm text-zinc-600 ring-1 ring-zinc-900/5">
+  <div class="flex min-w-[18rem] flex-1 gap-3">
+    <span class="inline-flex mt-0.5 shrink-0 text-zinc-400"><lucide-icon name="info" [size]="18"></lucide-icon></span>
+    <p>
+      Sorting priority: Keywords → Artist history → Genres (closest match wins). Unmatched tracks are sent to your review list.
+    </p>
+  </div>
+  <div class="flex shrink-0 items-center gap-3">
+    <span *ngIf="accuracy?.job?.running" class="flex items-center gap-2 text-zinc-500">
+      <span class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span>
+      {{ accuracy?.job?.step }}
+    </span>
+    <ng-container *ngIf="!accuracy?.job?.running">
+      <span *ngIf="stats && !accuracyOutdated" class="text-xs text-zinc-400">Accuracy measured {{ accuracy?.result?.generated_at | date:'d MMM, HH:mm' }}</span>
+      <span *ngIf="accuracyOutdated" class="text-xs text-amber-600">Rules changed since the last check</span>
+      <button class="btn-outline" (click)="checkAccuracy()">
+        <lucide-icon name="refresh-cw" [size]="15"></lucide-icon> {{ stats ? 'Re-check' : 'Check accuracy' }}
+      </button>
+    </ng-container>
+  </div>
+</div>
+
+<div *ngIf="loading" class="mt-10 flex items-center gap-2 text-sm text-zinc-500">
+  <span class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span> Loading…
+</div>
+
+<div *ngIf="!loading && !playlists.length" class="card mt-6 flex flex-col items-center p-10 text-center">
+  <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400">
+    <lucide-icon name="list-music" [size]="22"></lucide-icon>
+  </span>
+  <p class="mt-4 font-medium">No genre playlists yet</p>
+  <a routerLink="/setup" [queryParams]="{ step: 'choose' }" class="btn-primary mt-4">Choose playlists</a>
+</div>
+
+<div *ngIf="playlists.length" class="mt-6">
+  <app-genre-list [playlists]="playlists" [stats]="stats" [spotify]="spotify" [applied]="applied"
+                  (reordered)="reorder($event)" (edit)="editing = $event" (remove)="remove($event)"
+                  (suggest)="applyRuleSuggestion($event)">
+  </app-genre-list>
+</div>
+
+<app-rule-editor [playlist]="editing" (save)="save($event)" (close)="editing = null"></app-rule-editor>

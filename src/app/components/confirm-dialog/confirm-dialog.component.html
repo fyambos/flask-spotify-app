@@ -1,8 +1,10 @@
-<h2 mat-dialog-title>{{ data.title }}</h2>
-<mat-dialog-content>
-  <p>{{ data.message }}</p>
-</mat-dialog-content>
-<mat-dialog-actions align="end">
-  <button mat-button (click)="onCancel()">Cancel</button>
-  <button mat-raised-button color="warn" (click)="onConfirm()">Confirm</button>
-</mat-dialog-actions>
+<div class="w-[min(26rem,90vw)] p-6">
+  <h2 class="text-lg font-semibold tracking-tight text-zinc-900">{{ data.title }}</h2>
+  <p class="mt-2 text-sm leading-relaxed text-zinc-600">{{ data.message }}</p>
+  <div class="mt-6 flex justify-end gap-2">
+    <button class="btn-ghost" (click)="onCancel()">Cancel</button>
+    <button [ngClass]="data.danger ? 'btn bg-rose-600 text-white hover:bg-rose-700' : 'btn-primary'" (click)="onConfirm()">
+      {{ data.confirmLabel || 'Confirm' }}
+    </button>
+  </div>
+</div>

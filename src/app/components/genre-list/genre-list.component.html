@@ -1,0 +1,110 @@
+<div cdkDropList (cdkDropListDropped)="drop($event)" class="card divide-y divide-zinc-100 overflow-hidden">
+  <div *ngFor="let p of playlists; let i = index" cdkDrag cdkDragLockAxis="y"
+       class="group flex items-start gap-3 bg-white px-3 py-3.5 sm:px-4">
+    <button cdkDragHandle class="mt-2.5 cursor-grab touch-none text-zinc-300 transition hover:text-zinc-500 active:cursor-grabbing" aria-label="Drag to change priority">
+      <lucide-icon name="grip-vertical" [size]="18"></lucide-icon>
+    </button>
+
+    <div class="relative shrink-0">
+      <img *ngIf="spotify[p.playlist_id]?.image_url; else noCover" [src]="spotify[p.playlist_id].image_url" alt=""
+           class="h-12 w-12 rounded-xl object-cover ring-1 ring-zinc-900/5" />
+      <ng-template #noCover>
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-100 text-zinc-400">
+          <lucide-icon name="music-2" [size]="18"></lucide-icon>
+        </div>
+      </ng-template>
+      <span class="absolute -left-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-zinc-900 px-1 text-[10px] font-semibold text-white ring-2 ring-white">
+        {{ i + 1 }}
+      </span>
+    </div>
+
+    <div class="min-w-0 flex-1">
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span class="font-medium text-zinc-900">{{ p.name }}</span>
+        <span *ngIf="spotify[p.playlist_id] as sp" class="text-xs text-zinc-400">
+          <ng-container *ngIf="sp.name !== p.name">{{ sp.name }} · </ng-container>{{ sp.track_count }} tracks
+        </span>
+        <span *ngIf="stats?.[p.id] as s"
+              class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
+              [ngClass]="accuracyClass(s.accuracy)"
+              [title]="'Playlist re-sort results: ' + (s.accuracy * 100 | number:'1.0-0') + '% correctly matched (' + (s.accuracy_new_artists * 100 | number:'1.0-0') + '% for new artists)'">
+          {{ s.accuracy * 100 | number:'1.0-0' }}% accurate
+        </span>
+      </div>
+
+      <div class="mt-1.5 flex flex-wrap gap-1">
+        <span *ngFor="let k of p.album_keywords" class="chip bg-violet-50 text-violet-700" title="Album keyword">
+          <span class="text-violet-400">album</span> {{ k }}
+        </span>
+        <span *ngFor="let k of p.title_keywords" class="chip bg-sky-50 text-sky-700" title="Title keyword">
+          <span class="text-sky-400">title</span> {{ k }}
+        </span>
+        <span *ngFor="let g of p.genre_names.slice(0, 8)" class="chip">{{ g }}</span>
+        <span *ngIf="p.genre_names.length > 8" class="chip bg-transparent text-zinc-400">+{{ p.genre_names.length - 8 }}</span>
+        <span *ngFor="let g of p.exclude_genres" class="chip bg-rose-50 text-rose-600 line-through decoration-rose-300" title="Excluded genre">{{ g }}</span>
+        <span *ngIf="!ruleCount(p)" class="text-xs text-zinc-400">No rules, only artist history and your manual choices put tracks here.</span>
+      </div>
+
+      <button *ngIf="stats?.[p.id]?.misplaced?.length" type="button" (click)="toggle(p.id)"
+              class="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 -ml-2 text-xs font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900">
+        <span class="inline-flex transition" [class.rotate-90]="open.has(p.id)"><lucide-icon name="chevron-right" [size]="14"></lucide-icon></span>
+        {{ stats?.[p.id]?.misplaced?.length }} misplaced songs
+      </button>
+
+      <!-- Misplaced songs and rule suggestions -->
+      <div *ngIf="open.has(p.id) && stats?.[p.id] as s" class="mt-3 space-y-4 rounded-xl bg-zinc-50 p-3 sm:p-4">
+        <div *ngIf="s.suggestions?.length">
+          <div class="label mb-2">Suggested rules</div>
+          <div class="flex flex-wrap gap-1.5">
+            <button *ngFor="let sug of s.suggestions" type="button" (click)="suggest.emit(sug)" [disabled]="isApplied(sug)"
+                    class="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200 transition hover:ring-zinc-400 disabled:bg-brand-50 disabled:text-brand-700 disabled:ring-brand-600/20">
+              <lucide-icon [name]="isApplied(sug) ? 'check' : 'plus'" [size]="12"></lucide-icon>
+              {{ label(sug) }}
+              <span class="text-zinc-400">{{ sug.count }} songs</span>
+            </button>
+          </div>
+        </div>
+
+        <ul class="divide-y divide-zinc-200/70">
+          <li *ngFor="let song of visibleSongs(p.id)" class="flex gap-3 py-2.5 first:pt-0">
+            <img *ngIf="song.image_url" [src]="song.image_url" alt="" loading="lazy" class="h-9 w-9 shrink-0 rounded-md object-cover" />
+            <div *ngIf="!song.image_url" class="h-9 w-9 shrink-0 rounded-md bg-zinc-200"></div>
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm font-medium">{{ song.name }}</div>
+              <div class="truncate text-xs text-zinc-500">{{ song.artists.join(', ') }} · {{ song.album }}</div>
+              <div class="mt-0.5 truncate text-xs text-zinc-400" [title]="song.reason">
+                <ng-container *ngIf="song.went_to">Sorted into <span class="font-medium text-zinc-600">{{ playlistName(song.went_to) }}</span> · {{ song.reason }}</ng-container>
+                <ng-container *ngIf="!song.went_to">Not recognized<ng-container *ngIf="song.genres.length"> · {{ song.genres.join(', ') }}</ng-container></ng-container>
+              </div>
+              <div class="mt-1.5 flex flex-wrap gap-1">
+                <button *ngFor="let sug of song.suggestions" type="button" (click)="suggest.emit(sug)" [disabled]="isApplied(sug)"
+                        class="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] text-zinc-600 ring-1 ring-zinc-200 transition hover:text-zinc-900 hover:ring-zinc-400 disabled:bg-brand-50 disabled:text-brand-700 disabled:ring-brand-600/20">
+                  <lucide-icon [name]="isApplied(sug) ? 'check' : 'plus'" [size]="11"></lucide-icon>
+                  {{ label(sug) }}
+                </button>
+              </div>
+            </div>
+          </li>
+        </ul>
+
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <button *ngIf="remaining(p.id) > 0" type="button" class="btn-ghost px-3 py-1 text-xs" (click)="showMore(p.id)">
+            Show {{ remaining(p.id) < 10 ? remaining(p.id) : 10 }} more
+          </button>
+          <button type="button" class="btn-ghost ml-auto px-3 py-1 text-xs" (click)="edit.emit(p)">
+            <lucide-icon name="pencil" [size]="12"></lucide-icon> Add custom rule
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex shrink-0 items-center gap-0.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+      <button class="icon-btn" (click)="edit.emit(p)" aria-label="Edit rules" title="Edit rules">
+        <lucide-icon name="pencil" [size]="16"></lucide-icon>
+      </button>
+      <button *ngIf="removable" class="icon-btn hover:text-rose-600" (click)="remove.emit(p)" aria-label="Remove" title="Remove">
+        <lucide-icon name="trash-2" [size]="16"></lucide-icon>
+      </button>
+    </div>
+  </div>
+</div>

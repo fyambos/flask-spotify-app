@@ -1,49 +1,42 @@
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { FormsModule } from '@angular/forms';
-import { MatCardModule } from '@angular/material/card';
+import { HttpClientModule } from '@angular/common/http';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatDialogModule } from '@angular/material/dialog';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { ReactiveFormsModule } from '@angular/forms';
-import { MatSelectModule } from '@angular/material/select';
-import { MatFormFieldModule } from '@angular/material/form-field';
+import { DragDropModule } from '@angular/cdk/drag-drop';
+import {
+  LucideAngularModule, AlertTriangle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, HardDrive,
+  GripVertical, Heart, Info, ListMusic, Loader2, Music2, Pencil, Plus, RefreshCw, Search, Settings,
+  Sparkles, Trash2, Wand2, X,
+} from 'lucide-angular';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { SortPlaylistComponent } from './components/sort-playlist/sort-playlist.component';
-import { HttpClientModule } from '@angular/common/http';
-import { SavePlaylistsComponent } from './components/save-playlists/save-playlists.component';
-import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
-import { provideFirestore, getFirestore } from '@angular/fire/firestore';
-import { provideAuth, getAuth } from '@angular/fire/auth';
-import { environment } from 'src/environments/env.dev';
-import { PlaylistDisplayComponent } from './components/playlist-display/playlist-display.component';
-import { PlaylistEditDialogComponent } from './components/playlist-edit-dialog/playlist-edit-dialog.component';
 import { ConfirmDialogComponent } from './components/confirm-dialog/confirm-dialog.component';
-import { TopTracksComponent } from './components/top-tracks/top-tracks.component';
-import { SpotifySorterComponent } from './pages/spotify-sorter/spotify-sorter.component';
-import { SpotifyStatsComponent } from './pages/spotify-stats/spotify-stats.component';
-import { HomeComponent } from './pages/home/home.component';
-import { HeaderComponent } from './components/header/header.component';
-import { RecentlyPlayedComponent } from './components/recently-played/recently-played.component';
+import { ChipInputComponent } from './components/chip-input/chip-input.component';
+import { GenreListComponent } from './components/genre-list/genre-list.component';
+import { RuleEditorComponent } from './components/rule-editor/rule-editor.component';
+import { LikedSongsComponent } from './pages/liked-songs/liked-songs.component';
+import { SetupComponent } from './pages/setup/setup.component';
+import { GenresComponent } from './pages/genres/genres.component';
+import { StatsComponent } from './pages/stats/stats.component';
+import { SettingsComponent } from './pages/settings/settings.component';
+import { LibraryComponent } from './pages/library/library.component';
 
 @NgModule({
   declarations: [
     AppComponent,
-    SortPlaylistComponent,
-    SavePlaylistsComponent,
-    PlaylistDisplayComponent,
-    PlaylistEditDialogComponent,
     ConfirmDialogComponent,
-    TopTracksComponent,
-    SpotifySorterComponent,
-    SpotifyStatsComponent,
-    HomeComponent,
-    HeaderComponent,
-    RecentlyPlayedComponent,
+    ChipInputComponent,
+    GenreListComponent,
+    RuleEditorComponent,
+    LikedSongsComponent,
+    SetupComponent,
+    GenresComponent,
+    StatsComponent,
+    SettingsComponent,
+    LibraryComponent,
   ],
   imports: [
     BrowserModule,
@@ -51,18 +44,13 @@ import { RecentlyPlayedComponent } from './components/recently-played/recently-p
     BrowserAnimationsModule,
     HttpClientModule,
     FormsModule,
-    provideFirebaseApp(() => initializeApp(environment.firebase)),
-    provideFirestore(() => getFirestore()),
-    provideAuth(() => getAuth()),
-    MatCardModule,
     MatDialogModule,
-    MatButtonModule,
-    MatIconModule,
-    MatInputModule,
-    ReactiveFormsModule,
-    MatSelectModule,
-    MatFormFieldModule,
-    
+    DragDropModule,
+    LucideAngularModule.pick({
+      AlertTriangle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, GripVertical,
+      HardDrive, Heart,
+      Info, ListMusic, Loader2, Music2, Pencil, Plus, RefreshCw, Search, Settings, Sparkles, Trash2, Wand2, X,
+    }),
   ],
   providers: [],
   bootstrap: [AppComponent]

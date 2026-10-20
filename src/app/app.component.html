@@ -1,2 +1,54 @@
-<app-header></app-header>
-<router-outlet></router-outlet>
+<div *ngIf="backendDown" class="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
+  <div class="card flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-700">
+    <span class="inline-flex text-amber-500"><lucide-icon name="alert-triangle" [size]="16"></lucide-icon></span>
+    The backend is not running. Start it with <code class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs">python app.py</code> in src/backend, then reload.
+  </div>
+</div>
+
+<!-- Setup assistant: full screen, no navigation -->
+<router-outlet *ngIf="inSetup"></router-outlet>
+
+<div *ngIf="!inSetup" class="flex min-h-screen">
+  <aside class="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-zinc-200/70 bg-white/70 px-3 py-6 backdrop-blur md:flex">
+    <a routerLink="/likes" class="mb-8 flex items-center gap-2.5 px-3">
+      <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500 text-white shadow-soft">
+        <lucide-icon name="music-2" [size]="16"></lucide-icon>
+      </span>
+      <span class="text-[15px] font-semibold tracking-tight">Music Sorter</span>
+    </a>
+
+    <nav class="flex flex-col gap-0.5">
+      <a *ngFor="let item of nav" [routerLink]="item.path" routerLinkActive="bg-zinc-100 text-zinc-900"
+         class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-zinc-500 transition hover:bg-zinc-100/70 hover:text-zinc-900">
+        <lucide-icon [name]="item.icon" [size]="18" [strokeWidth]="1.75"></lucide-icon>
+        {{ item.label }}
+      </a>
+    </nav>
+
+    <div *ngIf="status?.spotify?.connected" class="mt-auto flex items-center gap-2.5 rounded-xl px-3 py-2">
+      <img *ngIf="status?.spotify?.image_url" [src]="status?.spotify?.image_url" class="h-7 w-7 rounded-full object-cover" alt="" />
+      <span *ngIf="!status?.spotify?.image_url" class="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold uppercase text-zinc-600">
+        {{ status?.spotify?.name?.charAt(0) }}
+      </span>
+      <div class="min-w-0">
+        <div class="truncate text-sm font-medium">{{ status?.spotify?.name }}</div>
+        <div class="text-xs text-zinc-400">Spotify connected</div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex min-w-0 flex-1 flex-col">
+    <!-- Mobile navigation -->
+    <nav class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-zinc-200/70 bg-white/80 px-3 py-2 backdrop-blur md:hidden">
+      <a *ngFor="let item of nav" [routerLink]="item.path" routerLinkActive="bg-zinc-100 text-zinc-900"
+         class="flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-zinc-500">
+        <lucide-icon [name]="item.icon" [size]="16"></lucide-icon>
+        {{ item.label }}
+      </a>
+    </nav>
+
+    <main class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+</div>

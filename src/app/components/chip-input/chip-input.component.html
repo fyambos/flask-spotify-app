@@ -1,0 +1,10 @@
+<div class="flex min-h-[2.5rem] flex-wrap items-center gap-1.5 rounded-xl bg-white px-2 py-1.5 ring-1 ring-zinc-200 focus-within:ring-2 focus-within:ring-brand-500">
+  <span *ngFor="let value of values" class="chip">
+    {{ value }}
+    <button type="button" (click)="remove(value)" class="-mr-1 rounded-full p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700" aria-label="Remove">
+      <lucide-icon name="x" [size]="12"></lucide-icon>
+    </button>
+  </span>
+  <input [(ngModel)]="draft" (keydown)="onKeydown($event)" (blur)="add()" [placeholder]="values.length ? '' : placeholder"
+         class="min-w-[6rem] flex-1 bg-transparent px-1 py-0.5 text-sm placeholder:text-zinc-400 focus:outline-none" />
+</div>

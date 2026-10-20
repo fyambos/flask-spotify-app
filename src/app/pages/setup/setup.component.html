@@ -1,0 +1,247 @@
+<div class="min-h-screen bg-gradient-to-b from-white to-zinc-50">
+  <div class="mx-auto max-w-4xl px-4 pb-32 pt-10 sm:px-8">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500 text-white shadow-soft">
+          <lucide-icon name="music-2" [size]="16"></lucide-icon>
+        </span>
+        <span class="text-[15px] font-semibold tracking-tight">Music Sorter</span>
+      </div>
+      <a *ngIf="reconfiguring" routerLink="/genres" class="btn-ghost">Cancel</a>
+    </div>
+
+    <!-- Steps -->
+    <ol class="mt-10 flex items-center gap-2 text-sm">
+      <ng-container *ngFor="let s of steps; let i = index; let last = last">
+        <li class="flex items-center gap-2"
+            [class.text-zinc-900]="stepIndex(step) >= i" [class.text-zinc-400]="stepIndex(step) < i">
+          <span class="flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold"
+                [ngClass]="stepIndex(step) > i ? 'bg-brand-500 text-white' : stepIndex(step) === i ? 'bg-zinc-900 text-white' : 'bg-zinc-200 text-zinc-500'">
+            <lucide-icon *ngIf="stepIndex(step) > i" name="check" [size]="14"></lucide-icon>
+            <ng-container *ngIf="stepIndex(step) <= i">{{ i + 1 }}</ng-container>
+          </span>
+          <span class="hidden font-medium sm:inline">{{ s.label }}</span>
+        </li>
+        <li *ngIf="!last" class="h-px flex-1 bg-zinc-200"></li>
+      </ng-container>
+    </ol>
+
+    <!-- 1. Welcome / connect -->
+    <section *ngIf="step === 'welcome'" class="mt-12">
+      <h1 class="text-3xl font-semibold tracking-tight">{{ reconfiguring ? 'Set up your genres again' : 'Welcome' }}</h1>
+      <p class="mt-2 max-w-xl text-zinc-500">
+        Music Sorter sorts your Liked Songs from Spotify into other Spotify playlists of your choosing. It learns how you
+        already sorted them, you can adjust the sorting rules.
+      </p>
+
+      <div class="mt-8 grid gap-3 sm:grid-cols-2">
+        <div class="card flex items-start gap-3 p-5">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full"
+                [ngClass]="status?.spotify?.connected ? 'bg-brand-50 text-brand-600' : 'bg-zinc-100 text-zinc-400'">
+            <lucide-icon [name]="status?.spotify?.connected ? 'check-circle-2' : 'loader-2'" [size]="18"
+                         [class.animate-spin]="!status"></lucide-icon>
+          </span>
+          <div>
+            <div class="font-medium">Spotify</div>
+            <div *ngIf="status?.spotify?.connected" class="text-sm text-zinc-500">Connected as {{ status?.spotify?.name }}</div>
+            <div *ngIf="status && !status.spotify.connected" class="text-sm text-zinc-500">
+              Not connected. Fill <code class="rounded bg-zinc-100 px-1">SPOTIFY_CLIENT_ID</code> and
+              <code class="rounded bg-zinc-100 px-1">SPOTIFY_CLIENT_SECRET</code> in <code class="rounded bg-zinc-100 px-1">src/backend/.env</code>,
+              restart the backend and reload this page.
+            </div>
+          </div>
+        </div>
+        <div class="card flex items-start gap-3 p-5">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full"
+                [ngClass]="status?.lastfm ? 'bg-brand-50 text-brand-600' : 'bg-amber-50 text-amber-600'">
+            <lucide-icon [name]="status?.lastfm ? 'check-circle-2' : 'alert-triangle'" [size]="18"></lucide-icon>
+          </span>
+          <div>
+            <div class="font-medium">Last.fm <span class="text-xs font-normal text-zinc-400">optional</span></div>
+            <div class="text-sm text-zinc-500">
+              {{ status?.lastfm ? 'Genres from Last.fm complete Spotify’s.' : 'Add LASTFM_API_KEY in .env for much better genres.' }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="status && !status.ffmpeg" class="card mt-3 flex items-start gap-3 p-5">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+          <lucide-icon name="alert-triangle" [size]="18"></lucide-icon>
+        </span>
+        <div class="text-sm text-zinc-500">
+          <div class="font-medium text-zinc-900">ffmpeg <span class="text-xs font-normal text-zinc-400">needed for downloads</span></div>
+          Mac: <code class="rounded bg-zinc-100 px-1">brew install ffmpeg</code> ·
+          Windows: <code class="rounded bg-zinc-100 px-1">winget install ffmpeg</code> ·
+          Linux: <code class="rounded bg-zinc-100 px-1">sudo apt install ffmpeg</code>. Then restart the backend.
+        </div>
+      </div>
+
+      <div class="mt-10">
+        <button class="btn-primary px-5 py-2.5" [disabled]="!status?.spotify?.connected" (click)="step = 'choose'">
+          Continue <lucide-icon name="arrow-right" [size]="16"></lucide-icon>
+        </button>
+      </div>
+    </section>
+
+    <!-- 2. Choose playlists -->
+    <section *ngIf="step === 'choose'" class="mt-12">
+      <h1 class="text-3xl font-semibold tracking-tight">Which playlists should your Liked Songs be sorted into?</h1>
+      <p class="mt-2 max-w-xl text-zinc-500">
+        Pick which playlists your Liked Songs should be sorted into, including a playlist for tracks the Music Sorter
+        doesn't know where to put. Your Liked Songs and other playlists are never touched.
+      </p>
+
+
+      <div class="mt-8">
+        <h2 class="text-base font-semibold">Can a song be in several playlists?</h2>
+        <p class="mt-1 text-sm text-zinc-500">For example a pop soundtrack in both “K-Pop” and “Pop” playlists.</p>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <button type="button" (click)="multiPlaylist = false"
+                  class="rounded-2xl bg-white p-4 text-left ring-1 transition"
+                  [ngClass]="!multiPlaylist ? 'ring-2 ring-zinc-900 shadow-soft' : 'ring-zinc-900/5 hover:ring-zinc-300'">
+            <div class="font-medium">One playlist per song</div>
+            <div class="mt-1 text-sm text-zinc-500">The first matching playlist in your priority order wins.</div>
+          </button>
+          <button type="button" (click)="multiPlaylist = true"
+                  class="rounded-2xl bg-white p-4 text-left ring-1 transition"
+                  [ngClass]="multiPlaylist ? 'ring-2 ring-zinc-900 shadow-soft' : 'ring-zinc-900/5 hover:ring-zinc-300'">
+            <div class="font-medium">Several playlists</div>
+            <div class="mt-1 text-sm text-zinc-500">Any playlist that matches. Downloads are only saved to the first playlist.</div>
+          </button>
+        </div>
+      </div>
+
+      <h2 class="mt-10 text-base font-semibold">Your playlists</h2>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <div class="relative min-w-[14rem] flex-1">
+          <span class="inline-flex pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"><lucide-icon name="search" [size]="16"></lucide-icon></span>
+          <input class="input pl-10" [(ngModel)]="search" placeholder="Search your playlists" />
+        </div>
+        <label class="flex cursor-pointer items-center gap-2 text-sm text-zinc-600">
+          <input type="checkbox" [(ngModel)]="showFollowed" class="h-4 w-4 rounded border-zinc-300 accent-zinc-900" />
+          Show playlists I follow
+        </label>
+      </div>
+
+      <div *ngIf="!playlists.length" class="mt-10 flex items-center gap-2 text-sm text-zinc-500">
+        <span class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span> Loading your playlists…
+      </div>
+
+      <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        <button *ngFor="let p of visiblePlaylists" (click)="toggle(p)" type="button"
+                class="group relative rounded-2xl bg-white p-2.5 text-left ring-1 transition"
+                [ngClass]="selected.has(p.id) ? 'ring-2 ring-zinc-900 shadow-soft' : 'ring-zinc-900/5 hover:ring-zinc-300'">
+          <div class="aspect-square overflow-hidden rounded-xl bg-zinc-100">
+            <img *ngIf="p.image_url" [src]="p.image_url" alt="" loading="lazy" class="h-full w-full object-cover" />
+            <div *ngIf="!p.image_url" class="flex h-full items-center justify-center text-zinc-300">
+              <lucide-icon name="music-2" [size]="28"></lucide-icon>
+            </div>
+          </div>
+          <div class="mt-2.5 truncate px-0.5 text-sm font-medium">{{ p.name.trim() }}</div>
+          <div class="px-0.5 text-xs text-zinc-400">{{ p.track_count }} tracks</div>
+          <span class="absolute right-4 top-4 flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-white transition"
+                [ngClass]="selected.has(p.id) ? 'bg-zinc-900 text-white' : 'bg-white/80 text-transparent opacity-0 group-hover:opacity-100'">
+            <lucide-icon name="check" [size]="14"></lucide-icon>
+          </span>
+        </button>
+      </div>
+
+    </section>
+
+    <!-- 3. Analysing -->
+    <section *ngIf="step === 'analysing'" class="mt-24 flex flex-col items-center text-center">
+      <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+        <lucide-icon name="sparkles" [size]="26"></lucide-icon>
+      </span>
+      <h1 class="mt-6 text-2xl font-semibold tracking-tight">Learning how you sort your music</h1>
+      <p class="mt-2 max-w-md text-zinc-500">Reading the songs, artists and genres of your playlists. This might take a few minutes.</p>
+      <div *ngIf="!job?.error" class="mt-8 w-full max-w-sm">
+        <div class="h-1.5 overflow-hidden rounded-full bg-zinc-200">
+          <div class="h-full rounded-full bg-zinc-900 transition-all duration-500"
+               [style.width.%]="job?.total ? 100 * (job?.done || 0) / (job?.total || 1) : 8"></div>
+        </div>
+        <p class="mt-3 text-sm text-zinc-500">{{ job?.step }}</p>
+      </div>
+      <div *ngIf="job?.error" class="mt-8 max-w-md rounded-xl bg-rose-50 p-4 text-sm text-rose-700">
+        {{ job?.error }}
+        <button class="btn-outline mt-3" (click)="step = 'choose'">Back</button>
+      </div>
+    </section>
+
+    <!-- 4. Review -->
+    <section *ngIf="step === 'review'" class="mt-12">
+      <h1 class="text-3xl font-semibold tracking-tight">Here is how your music is sorted</h1>
+      <p class="mt-2 max-w-2xl text-zinc-500">
+        These rules were learned from your playlists. Each playlist shows the count of songs successfully sorted by its
+        specific rules. Drag playlists to adjust a playlist's priority.
+      </p>
+
+      <div class="mt-8 grid gap-3 sm:grid-cols-3">
+        <div class="card p-5">
+          <div class="label">Overall accuracy</div>
+          <div class="mt-2 text-3xl font-semibold tracking-tight">{{ averageAccuracy * 100 | number:'1.0-0' }}%</div>
+          <div class="mt-1 text-xs text-zinc-500">of sorted songs returned to their correct playlist</div>
+        </div>
+        <div class="card p-5 sm:col-span-2">
+          <div class="label">Unrecognized songs</div>
+          <select class="input mt-2" [(ngModel)]="fallbackGenre">
+            <option value="">Ask me in the review list</option>
+            <option *ngFor="let p of proposal" [value]="p.name">Suggest “{{ p.name }}” in the review list</option>
+          </select>
+          <div class="mt-1.5 text-xs text-zinc-500">These songs must be confirmed manually.
+            {{ multiPlaylist ? 'A song can be in several playlists.' : 'One playlist per song.' }}
+            <button class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2" (click)="step = 'choose'">Change</button>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="weakPlaylists.length" class="mt-4 flex gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800 ring-1 ring-amber-600/10">
+        <span class="inline-flex mt-0.5 shrink-0"><lucide-icon name="wand-2" [size]="18"></lucide-icon></span>
+        <div>
+          <span class="font-medium">{{ weakPlaylists.length }} playlist{{ weakPlaylists.length > 1 ? 's are' : ' is' }} hard to tell apart by genre:</span>
+          {{ weakNames }}.
+          Excluded genres, album keywords, or moving them higher in the list usually fix it. You can also confirm their
+          songs in the review list, the app remembers the artist.
+        </div>
+      </div>
+
+      <div class="mt-6">
+        <div *ngIf="rulesEdited || evaluation?.running" class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm ring-1 ring-zinc-900/5">
+          <span *ngIf="!evaluation?.running" class="text-amber-700">Rules changed. Accuracy shown is from the previous rules.</span>
+          <span *ngIf="evaluation?.running" class="flex items-center gap-2 text-zinc-500">
+            <span class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span>{{ evaluation?.step }}
+          </span>
+          <button *ngIf="!evaluation?.running" class="btn-outline" (click)="recheck()">
+            <lucide-icon name="refresh-cw" [size]="15"></lucide-icon> Re-check accuracy
+          </button>
+        </div>
+        <app-genre-list [playlists]="proposal" [stats]="stats" [spotify]="byId" [applied]="applied"
+                        (reordered)="reorderProposal($event)" (edit)="editing = $event" (remove)="removeFromProposal($event)"
+                        (suggest)="applyRuleSuggestion($event)">
+        </app-genre-list>
+      </div>
+    </section>
+  </div>
+
+  <!-- Sticky footer actions -->
+  <div *ngIf="step === 'choose' || step === 'review'" class="fixed inset-x-0 bottom-0 border-t border-zinc-200/70 bg-white/80 backdrop-blur">
+    <div class="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-4 sm:px-8">
+      <button class="btn-ghost" (click)="step = step === 'review' ? 'choose' : 'welcome'">
+        <lucide-icon name="chevron-left" [size]="16"></lucide-icon> Back
+      </button>
+      <div class="flex items-center gap-3">
+        <span *ngIf="step === 'choose'" class="text-sm text-zinc-500">{{ selected.size }} selected</span>
+        <button *ngIf="step === 'choose'" class="btn-primary px-5 py-2.5" [disabled]="!selected.size" (click)="analyse()">
+          <lucide-icon name="sparkles" [size]="16"></lucide-icon> Analyse my playlists
+        </button>
+        <button *ngIf="step === 'review'" class="btn-brand px-5 py-2.5" [disabled]="saving || !proposal.length" (click)="finish()">
+          {{ saving ? 'Saving…' : 'Save and sort my likes' }} <lucide-icon name="arrow-right" [size]="16"></lucide-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <app-rule-editor [playlist]="editing" (save)="saveEdit($event)" (close)="editing = null"></app-rule-editor>
+</div>

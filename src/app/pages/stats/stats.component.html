@@ -1,0 +1,33 @@
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="page-title">Stats</h1>
+    <p class="page-subtitle">What you listen to on Spotify.</p>
+  </div>
+  <div class="inline-flex rounded-full bg-zinc-100 p-1 text-sm">
+    <button class="rounded-full px-4 py-1.5 font-medium transition"
+            [ngClass]="tab === 'top' ? 'bg-white text-zinc-900 shadow-soft' : 'text-zinc-500 hover:text-zinc-900'"
+            (click)="tab = 'top'">All-time top</button>
+    <button class="rounded-full px-4 py-1.5 font-medium transition"
+            [ngClass]="tab === 'recent' ? 'bg-white text-zinc-900 shadow-soft' : 'text-zinc-500 hover:text-zinc-900'"
+            (click)="tab = 'recent'">Recently played</button>
+  </div>
+</div>
+
+<div *ngIf="loading" class="mt-10 flex items-center gap-2 text-sm text-zinc-500">
+  <span class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span> Loading…
+</div>
+
+<ol *ngIf="!loading" class="card mt-6 divide-y divide-zinc-100 overflow-hidden">
+  <li *ngFor="let track of tracks; let i = index" class="group flex items-center gap-4 px-4 py-3 transition hover:bg-zinc-50">
+    <span class="w-6 text-right text-sm tabular-nums text-zinc-400">{{ i + 1 }}</span>
+    <img [src]="track.image_url" alt="" class="h-11 w-11 rounded-lg object-cover ring-1 ring-zinc-900/5" />
+    <div class="min-w-0 flex-1">
+      <div class="truncate font-medium">{{ track.name }}</div>
+      <div class="truncate text-sm text-zinc-500">{{ track.artist }}<ng-container *ngIf="track.album"> · {{ track.album }}</ng-container></div>
+    </div>
+    <a [href]="track.url" target="_blank" rel="noopener" class="icon-btn opacity-0 group-hover:opacity-100" title="Open in Spotify">
+      <lucide-icon name="external-link" [size]="16"></lucide-icon>
+    </a>
+  </li>
+  <li *ngIf="!tracks.length" class="px-4 py-10 text-center text-sm text-zinc-500">Nothing to show.</li>
+</ol>

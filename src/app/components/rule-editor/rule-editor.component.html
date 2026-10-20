@@ -1,0 +1,60 @@
+<div *ngIf="draft" class="fixed inset-0 z-40 flex justify-end">
+  <div class="absolute inset-0 bg-zinc-900/20 backdrop-blur-[2px]" (click)="close.emit()"></div>
+
+  <form (ngSubmit)="submit()" class="relative flex h-full w-full max-w-md flex-col bg-white shadow-lift">
+    <div class="flex items-start justify-between border-b border-zinc-100 px-6 py-5">
+      <div>
+        <p class="label">Edit rules</p>
+        <h2 class="mt-1 text-lg font-semibold tracking-tight">{{ playlist?.name }}</h2>
+      </div>
+      <button type="button" class="icon-btn" (click)="close.emit()" aria-label="Close">
+        <lucide-icon name="x" [size]="18"></lucide-icon>
+      </button>
+    </div>
+
+    <div class="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+      <div>
+        <label class="mb-1.5 block text-sm font-medium">Name</label>
+        <input class="input" name="name" [(ngModel)]="draft.name" />
+        <p class="mt-1.5 text-xs text-zinc-500">Also the folder name for downloaded songs.</p>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium">Genres</label>
+        <app-chip-input [(values)]="draft.genre_names" placeholder="k-pop, k-rap…"></app-chip-input>
+        <p class="mt-1.5 text-xs text-zinc-500">Spotify or Last.fm genres that sort a song here</p>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium">Excluded genres</label>
+        <app-chip-input [(values)]="draft.exclude_genres" placeholder="anime…"></app-chip-input>
+        <p class="mt-1.5 text-xs text-zinc-500">Exclude songs of this genre from this playlist</p>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium">Album keywords</label>
+        <app-chip-input [(values)]="draft.album_keywords" placeholder="ost, original television soundtrack…"></app-chip-input>
+        <p class="mt-1.5 text-xs text-zinc-500">Checked first with highest priority.</p>
+      </div>
+
+      <div>
+        <label class="mb-1.5 block text-sm font-medium">Title keywords</label>
+        <app-chip-input [(values)]="draft.title_keywords" placeholder="from * ost…"></app-chip-input>
+      </div>
+
+      <div class="flex gap-3 rounded-xl bg-zinc-50 p-4 text-xs leading-relaxed text-zinc-600">
+        <span class="inline-flex mt-0.5 shrink-0 text-zinc-400"><lucide-icon name="info" [size]="16"></lucide-icon></span>
+        <p>
+          Keywords match whole words. Use <code class="rounded bg-white px-1 ring-1 ring-zinc-200">*</code> for any letters:
+          <code class="rounded bg-white px-1 ring-1 ring-zinc-200">k-*</code> matches k-pop and k-rap,
+          <code class="rounded bg-white px-1 ring-1 ring-zinc-200">*ballad</code> matches k-ballad.
+        </p>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-2 border-t border-zinc-100 px-6 py-4">
+      <button type="button" class="btn-ghost" (click)="close.emit()">Cancel</button>
+      <button type="submit" class="btn-primary">Save</button>
+    </div>
+  </form>
+</div>

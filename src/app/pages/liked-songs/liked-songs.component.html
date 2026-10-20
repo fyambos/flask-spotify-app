@@ -1,0 +1,137 @@
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="page-title">Liked Songs</h1>
+    <p class="page-subtitle">Organize your liked songs into playlists. Changes won't affect Spotify until you save them.</p>
+  </div>
+  <div *ngIf="state?.preview" class="flex items-center gap-2">
+    <button class="btn-outline" (click)="startPreview()" [disabled]="state?.job?.running">
+      <lucide-icon name="refresh-cw" [size]="16" [class.animate-spin]="state?.job?.running"></lucide-icon> Re-analyse
+    </button>
+    <button class="btn-brand" (click)="apply()" [disabled]="state?.job?.running || applying || !count('planned')">
+      <span class="inline-flex animate-spin"><lucide-icon *ngIf="applying" name="loader-2" [size]="16"></lucide-icon></span>
+      {{ applying ? 'Adding…' : 'Add ' + count('planned') + ' to Spotify' }}
+    </button>
+  </div>
+</div>
+
+<!-- Progress -->
+<div *ngIf="state?.job?.running" class="card mt-6 p-5">
+  <div class="flex items-center justify-between text-sm">
+    <span class="flex items-center gap-2 font-medium">
+      <span class="inline-flex animate-spin text-zinc-400"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span>
+      {{ state?.job?.step }}
+    </span>
+    <span *ngIf="state?.job?.total" class="tabular-nums text-zinc-500">{{ state?.job?.done }} / {{ state?.job?.total }}</span>
+  </div>
+  <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+    <div class="h-full rounded-full bg-zinc-900 transition-all duration-500"
+         [style.width.%]="state?.job?.total ? 100 * (state?.job?.done || 0) / (state?.job?.total || 1) : 5"></div>
+  </div>
+</div>
+
+<div *ngIf="state?.job?.error" class="mt-6 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700 ring-1 ring-rose-600/10">{{ state?.job?.error }}</div>
+<div *ngIf="message" class="mt-6 flex items-center gap-2 rounded-2xl bg-brand-50 p-4 text-sm text-brand-800 ring-1 ring-brand-600/10">
+  <lucide-icon name="check-circle-2" [size]="18"></lucide-icon> {{ message }}
+</div>
+
+<!-- Empty state -->
+<div *ngIf="state && !state.preview && !state.job.running" class="card mt-8 flex flex-col items-center px-6 py-14 text-center">
+  <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
+    <lucide-icon name="heart" [size]="26"></lucide-icon>
+  </span>
+  <h2 class="mt-5 text-lg font-semibold tracking-tight">Sort your liked songs</h2>
+  <p class="mt-1 max-w-sm text-sm text-zinc-500">Smart genre suggestions for your liked songs. Review the recommendations, then add them to your playlists.</p>
+  <button class="btn-primary mt-6 px-5 py-2.5" (click)="startPreview()">
+    <lucide-icon name="sparkles" [size]="16"></lucide-icon> Analyse my likes
+  </button>
+</div>
+
+<ng-container *ngIf="state?.preview">
+  <!-- Summary -->
+  <div class="mt-6 grid gap-3 sm:grid-cols-3">
+    <div class="card p-5">
+      <div class="label">To review</div>
+      <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ count('review') }}</div>
+    </div>
+    <div class="card p-5">
+      <div class="label">Ready to add</div>
+      <div class="mt-1.5 text-2xl font-semibold tracking-tight text-brand-600">{{ count('planned') }}</div>
+    </div>
+    <div class="card p-5">
+      <div class="label">Already sorted</div>
+      <div class="mt-1.5 text-2xl font-semibold tracking-tight text-zinc-400">{{ count('already') }}</div>
+    </div>
+  </div>
+
+  <div *ngIf="distribution.length" class="mt-3 flex flex-wrap gap-1.5">
+    <button *ngFor="let d of distribution" (click)="filter = 'planned'; genreFilter = genreFilter === d.id ? '' : d.id"
+            class="chip px-3 py-1 transition hover:bg-zinc-200"
+            [ngClass]="genreFilter === d.id && filter === 'planned' ? 'bg-zinc-900 text-white hover:bg-zinc-700' : ''">
+      {{ d.name }} <span class="opacity-60">+{{ d.planned }}</span>
+    </button>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="mt-8 flex flex-wrap items-center gap-3">
+    <div class="inline-flex rounded-full bg-zinc-100 p-1 text-sm">
+      <button *ngFor="let t of tabs" (click)="filter = t.id"
+              class="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-medium transition"
+              [ngClass]="filter === t.id ? 'bg-white text-zinc-900 shadow-soft' : 'text-zinc-500 hover:text-zinc-900'">
+        {{ t.label }} <span class="tabular-nums text-zinc-400">{{ count(t.id) }}</span>
+      </button>
+    </div>
+    <div class="relative min-w-[12rem] flex-1">
+      <span class="inline-flex pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"><lucide-icon name="search" [size]="16"></lucide-icon></span>
+      <input class="input rounded-full pl-10" [(ngModel)]="search" placeholder="Search songs, artists, albums" />
+    </div>
+  </div>
+
+  <!-- List -->
+  <ul class="card mt-4 divide-y divide-zinc-100 overflow-hidden">
+    <li *ngFor="let item of visibleItems" class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:flex-nowrap">
+      <img *ngIf="item.image_url" [src]="item.image_url" alt="" loading="lazy" class="h-11 w-11 shrink-0 rounded-lg object-cover ring-1 ring-zinc-900/5" />
+      <div *ngIf="!item.image_url" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300">
+        <lucide-icon name="music-2" [size]="16"></lucide-icon>
+      </div>
+
+      <div class="min-w-0 flex-1">
+        <div class="truncate font-medium">{{ item.name }}</div>
+        <div class="truncate text-sm text-zinc-500">{{ item.artists.join(', ') }} <span class="text-zinc-300">·</span> {{ item.album }}</div>
+        <div *ngIf="filter === 'review'" class="mt-0.5 truncate text-xs text-zinc-400">
+          {{ item.genres.length ? item.genres.slice(0, 5).join(', ') : 'No genre found on Spotify or Last.fm' }}
+        </div>
+      </div>
+
+      <!-- Placed songs -->
+      <div *ngIf="filter !== 'review'" class="flex shrink-0 flex-col items-end gap-0.5 text-right">
+        <div class="flex flex-wrap justify-end gap-1">
+          <span class="chip bg-zinc-900 text-white">{{ playlistName(item.playlist) }}</span>
+          <span *ngFor="let extra of item.also || []" class="chip">+ {{ playlistName(extra) }}</span>
+        </div>
+        <span class="max-w-[16rem] truncate text-xs text-zinc-400" [title]="item.reason">{{ item.reason }}</span>
+      </div>
+
+      <!-- Choose / change -->
+      <div *ngIf="filter === 'review' || filter === 'planned'" class="flex w-full shrink-0 items-center gap-2 sm:w-auto"
+           [class.sm:ml-2]="filter === 'planned'">
+        <select [(ngModel)]="choices[item.track_id]" class="input w-auto rounded-full py-1.5 pr-8">
+          <option [ngValue]="undefined" disabled>{{ filter === 'review' ? 'Choose genre' : 'Change' }}</option>
+          <option *ngFor="let p of playlists" [value]="p.id">{{ p.name }}{{ p.id === item.suggestion ? ' (suggested)' : '' }}</option>
+        </select>
+        <label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500" title="Remember this choice for the artist">
+          <input type="checkbox" [(ngModel)]="remember[item.track_id]" class="h-3.5 w-3.5 rounded accent-zinc-900" /> whole artist
+        </label>
+        <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white transition hover:bg-zinc-700 disabled:opacity-30"
+                [disabled]="!choices[item.track_id]" (click)="choose(item)" title="Confirm">
+          <lucide-icon name="check" [size]="15"></lucide-icon>
+        </button>
+      </div>
+    </li>
+
+    <li *ngIf="!visibleItems.length" class="flex flex-col items-center px-4 py-12 text-center">
+      <span class="inline-flex text-brand-500"><lucide-icon name="check-circle-2" [size]="22"></lucide-icon></span>
+      <p class="mt-2 text-sm text-zinc-500">{{ filter === 'review' ? 'Nothing left to review.' : 'Nothing here.' }}</p>
+    </li>
+  </ul>
+  <p *ngIf="count(filter) > 300" class="mt-3 text-center text-xs text-zinc-400">Showing the first 300 songs. Use the search to find a song.</p>
+</ng-container>

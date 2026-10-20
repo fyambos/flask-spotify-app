@@ -455,6 +455,7 @@ def summary():
             'playlists': len(plan['playlists']),
         }
     return {
+        'playlist_names': {pid: info['name'] for pid, info in (plan or {}).get('playlists', {}).items()},
         'music_dir': str(music_root(config)),
         'folders': [{'name': k, 'count': v} for k, v in folders.items()],
         'downloaded': sum(folders.values()),

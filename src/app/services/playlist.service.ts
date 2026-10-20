@@ -23,6 +23,7 @@ export interface AppConfig {
   removed: { mode: 'keep' | 'move' | 'delete'; folder: string };
   youtube_cookies: string;
   apple_music_auto: boolean;
+  apple_folders: { [spotifyPlaylistId: string]: string };
   artist_rules: { [artistId: string]: { name: string; playlist: string } };
   playlists: GenrePlaylist[];
 }
@@ -136,6 +137,7 @@ export interface ImportResult {
 
 export interface LibraryState {
   job: JobState;
+  playlist_names: { [id: string]: string };
   import: ImportResult | null;
   apple_music: { available: boolean; job: JobState };
   music_dir: string;

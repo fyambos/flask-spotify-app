@@ -110,9 +110,10 @@ on run argv
 end run
 '''
 
-# Lines: "P" TAB <spotify id> TAB <apple persistent id or empty> TAB <folder for a new playlist or empty> TAB <name>
+# Lines: "P" TAB <spotify id> TAB <apple persistent id or empty> TAB <folder or empty> TAB <name> TAB <song count>
 #        followed by "T" TAB <track persistent id> lines, in order.
-# Existing playlists are emptied and filled again (they keep their cover and folder).
+# Existing playlists are emptied and filled again (they keep their cover), and moved to
+# their folder. Playlists without songs are deleted, not created.
 # Prints "C" TAB <spotify id> TAB <persistent id> for each playlist it creates.
 WRITE_PLAYLISTS = r'''
 on run argv
@@ -131,21 +132,37 @@ on run argv
                     set pid to item 3 of parts
                     set folderName to item 4 of parts
                     set playlistName to item 5 of parts
+                    set songCount to (item 6 of parts) as integer
                     set pl to missing value
                     if pid is not "" then
                         try
                             set pl to (first user playlist whose persistent ID is pid)
                         end try
                     end if
-                    if pl is missing value then
-                        if folderName is not "" and (exists folder playlist folderName) then
-                            set pl to make new user playlist at folder playlist folderName with properties {name:playlistName}
-                        else
-                            set pl to make new user playlist with properties {name:playlistName}
-                        end if
-                        set out to out & "C" & tab & sid & tab & (persistent ID of pl) & linefeed
+                    if songCount is 0 then
+                        if pl is not missing value then delete pl
+                        set pl to missing value
                     else
-                        delete every track of pl
+                        if folderName is not "" and not (exists folder playlist folderName) then
+                            make new folder playlist with properties {name:folderName}
+                        end if
+                        if pl is missing value then
+                            if folderName is not "" then
+                                set pl to make new user playlist at folder playlist folderName with properties {name:playlistName}
+                            else
+                                set pl to make new user playlist with properties {name:playlistName}
+                            end if
+                            set out to out & "C" & tab & sid & tab & (persistent ID of pl) & linefeed
+                        else
+                            delete every track of pl
+                            if folderName is not "" then
+                                set currentFolder to ""
+                                try
+                                    set currentFolder to name of parent of pl
+                                end try
+                                if currentFolder is not folderName then move pl to folder playlist folderName
+                            end if
+                        end if
                     end if
                 else if item 1 of parts is "T" and pl is not missing value then
                     try
@@ -251,17 +268,22 @@ def update(sp=None, progress=None):
 
     progress(step='Writing playlists in Apple Music')
     existing = _existing_playlists()
+    parents = {pid: parent for pid, _, parent in existing}
     links = lib.setdefault('apple_playlists', {})
     genre_ids = {p['playlist_id'] for p in config['playlists']}
+    folders = dict(config.get('apple_folders') or {})
     lines = []
     for spotify_id, info in plan['playlists'].items():
         ids = [tracks[t]['apple_id'] for t in info['track_ids'] if tracks.get(t, {}).get('apple_id')]
         pid = _find_playlist(spotify_id, info['name'], links, existing)
-        folder = GENRES_FOLDER if spotify_id in genre_ids else ''
-        lines.append(f"P\t{spotify_id}\t{pid}\t{folder}\t{info['name']}")
+        if spotify_id not in folders:
+            # First time: keep the folder the playlist already has in Apple Music.
+            folders[spotify_id] = parents.get(pid) or (GENRES_FOLDER if spotify_id in genre_ids else '')
+        lines.append(f"P\t{spotify_id}\t{pid}\t{folders[spotify_id]}\t{info['name']}\t{len(ids)}")
         lines.extend(f'T\t{track}' for track in ids)
         if pid:
             links[spotify_id] = pid
+    config_store.update_settings({'apple_folders': folders})
     for line in _run(WRITE_PLAYLISTS, '\n'.join(lines)).splitlines():
         parts = line.split('\t')
         if len(parts) == 3 and parts[0] == 'C':

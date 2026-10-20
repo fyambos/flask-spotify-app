@@ -24,6 +24,9 @@ DEFAULT_CONFIG = {
     'youtube_cookies': '',
     # macOS: update Apple Music at the end of each library sync.
     'apple_music_auto': True,
+    # Apple Music folder of each playlist ({spotify playlist id: folder name, '' = top level}).
+    # The Spotify Web API does not give playlist folders, so they are set here.
+    'apple_folders': {},
     # Genre that unmatched tracks go to once you review them (must be one of the playlists).
     'fallback_genre': 'Other',
     # Use the genre playlists a track's artist is already in.
@@ -146,7 +149,7 @@ def set_artist_rule(artist_id, artist_name, entry_id):
 
 def update_settings(changes):
     config = load_config()
-    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'removed', 'youtube_cookies', 'apple_music_auto'):
+    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'removed', 'youtube_cookies', 'apple_music_auto', 'apple_folders'):
         if key in changes:
             config[key] = changes[key]
     save_config(config)

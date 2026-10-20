@@ -103,12 +103,27 @@
     </div>
   </section>
 
+  <section *ngIf="appleFolders.length" class="card divide-y divide-zinc-100">
+    <div class="px-6 py-5">
+      <h2 class="font-semibold">Apple Music folders</h2>
+      <p class="mt-0.5 text-sm text-zinc-500">Folder of each playlist in Apple Music. Spotify does not share its folders, so they are set here. Empty means top level.</p>
+    </div>
+    <datalist id="apple-folders">
+      <option *ngFor="let f of folderNames" [value]="f"></option>
+    </datalist>
+    <div *ngFor="let p of appleFolders; trackBy: trackById" class="flex items-center justify-between gap-4 px-6 py-2.5 text-sm">
+      <span class="truncate">{{ p.name }}</span>
+      <input class="input w-48 py-1.5" list="apple-folders" [ngModel]="config.apple_folders[p.id] || ''"
+             (change)="setFolder(p.id, $any($event.target).value)" placeholder="Top level" />
+    </div>
+  </section>
+
   <section class="card divide-y divide-zinc-100">
     <div class="px-6 py-5">
       <h2 class="font-semibold">Remembered artists</h2>
       <p class="mt-0.5 text-sm text-zinc-500">Choices you made with “whole artist” in the review list.</p>
     </div>
-    <div *ngFor="let a of rememberedArtists" class="group flex items-center justify-between px-6 py-3 text-sm">
+    <div *ngFor="let a of rememberedArtists; trackBy: trackById" class="group flex items-center justify-between px-6 py-3 text-sm">
       <span><span class="font-medium">{{ a.name }}</span> <span class="text-zinc-400">→</span> {{ a.playlist }}</span>
       <button class="icon-btn opacity-0 group-hover:opacity-100" (click)="forget(a.id)" title="Forget">
         <lucide-icon name="x" [size]="16"></lucide-icon>

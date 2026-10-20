@@ -107,7 +107,7 @@
         <li>Pair them, then share the folder <span class="break-all font-medium text-zinc-700">{{ state?.music_dir }}</span>.</li>
         <li>In Poweramp, add the folder. It reads the playlists.</li>
       </ol>
-      <p class="mt-2">New songs arrive by themselves when the phone is on the same Wi-Fi.</p>
+      <p class="mt-2">The folder syncs when the phone and the computer are on the same Wi-Fi.</p>
     </div>
   </div>
 </section>
@@ -150,7 +150,7 @@
   </button>
   <div *ngIf="showImport" class="card mt-3 p-6">
   <p class="mt-0.5 text-sm text-zinc-500">
-    Songs you already have are moved to the music folder instead of being downloaded.
+    Import music files you already downloaded, so they are not downloaded again.
   </p>
   <div class="mt-4 flex flex-wrap items-center gap-3">
     <input class="input min-w-[16rem] flex-1" [(ngModel)]="importPath" placeholder="Folder with your music files" />

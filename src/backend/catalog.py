@@ -252,7 +252,6 @@ def _read_spotify_export(path):
                 data = json.loads(z.read(member).decode('utf-8'))
                 for p in data.get('playlists', []):
                     name = clean_name(p.get('name') or '')
-                    # The export lists the playlists you made (followed ones are not in it).
                     for item in p.get('items', []):
                         t = item.get('track') or {}
                         add('name:' + name, name, True, t.get('trackName'), t.get('artistName'),

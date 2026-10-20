@@ -11,7 +11,6 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv('SPOTSORT_DATA_DIR', BACKEND_DIR / 'data')).expanduser()
 CONFIG_PATH = DATA_DIR / 'config.json'
-FIRESTORE_EXPORT_PATH = BACKEND_DIR / 'firestore-export.json'
 
 DEFAULT_CONFIG = {
     'music_dir': '~/Music/Spotify',
@@ -47,36 +46,8 @@ DEFAULT_CONFIG = {
 
 RULE_FIELDS = ('genre_names', 'exclude_genres', 'album_keywords', 'title_keywords')
 
-# Local genre name for each Firestore document, recognised by its first keyword.
-FIRESTORE_GENRE_NAMES = {
-    'k-': 'Kr',
-    'j-': 'Anime',
-    'pop': 'BOP',
-    'r&b': 'RnB & Indie',
-    'video game music': 'Scorecore',
-    'phonk': 'Phonk',
-    'metal': 'Symphonic',
-}
-
-
 def _new_id():
     return uuid.uuid4().hex[:12]
-
-
-def _migrate_from_firestore():
-    export = json.loads(FIRESTORE_EXPORT_PATH.read_text(encoding='utf-8'))
-    playlists = []
-    for doc_id, doc in export.get('playlists', {}).items():
-        data = doc['data']
-        keywords = data.get('genre_names', [])
-        name = FIRESTORE_GENRE_NAMES.get(keywords[0] if keywords else '', '')
-        playlists.append({
-            'id': doc_id,
-            'name': name,
-            'playlist_id': data['playlist_id'],
-            'genre_names': keywords,
-        })
-    return playlists
 
 
 def _normalize(config):
@@ -93,10 +64,7 @@ def load_config():
     if CONFIG_PATH.exists():
         return _normalize(json.loads(CONFIG_PATH.read_text(encoding='utf-8')))
 
-    config = dict(DEFAULT_CONFIG)
-    if FIRESTORE_EXPORT_PATH.exists():
-        config['playlists'] = _migrate_from_firestore()
-    config = _normalize(config)
+    config = _normalize(dict(DEFAULT_CONFIG))
     save_config(config)
     return config
 

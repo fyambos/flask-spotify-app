@@ -6,7 +6,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatDialogModule } from '@angular/material/dialog';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import {
-  LucideAngularModule, AlertTriangle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, HardDrive,
+  LucideAngularModule, AlertTriangle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, HardDrive, Home, LogIn,
   GripVertical, Heart, Info, ListMusic, Loader2, Music2, Pencil, Plus, RefreshCw, Search, Settings,
   Sparkles, Trash2, Wand2, X,
 } from 'lucide-angular';
@@ -25,6 +25,7 @@ import { GenresComponent } from './pages/genres/genres.component';
 import { StatsComponent } from './pages/stats/stats.component';
 import { SettingsComponent } from './pages/settings/settings.component';
 import { LibraryComponent } from './pages/library/library.component';
+import { HomeComponent } from './pages/home/home.component';
 
 @NgModule({
   declarations: [
@@ -40,6 +41,7 @@ import { LibraryComponent } from './pages/library/library.component';
     StatsComponent,
     SettingsComponent,
     LibraryComponent,
+    HomeComponent,
   ],
   imports: [
     BrowserModule,
@@ -51,7 +53,7 @@ import { LibraryComponent } from './pages/library/library.component';
     DragDropModule,
     LucideAngularModule.pick({
       AlertTriangle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, GripVertical,
-      HardDrive, Heart,
+      HardDrive, Heart, Home, LogIn,
       Info, ListMusic, Loader2, Music2, Pencil, Plus, RefreshCw, Search, Settings, Sparkles, Trash2, Wand2, X,
     }),
   ],

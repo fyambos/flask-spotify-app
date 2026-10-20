@@ -1,4 +1,4 @@
-<div *ngIf="backendDown" class="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
+<div *ngIf="backendDown && !inSetup" class="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
   <div class="card flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-700">
     <span class="inline-flex text-amber-500"><lucide-icon name="alert-triangle" [size]="16"></lucide-icon></span>
     The backend is not running. Start it with <code class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs">python app.py</code> in src/backend, then reload.
@@ -18,7 +18,7 @@
 
 <div *ngIf="!inSetup" class="flex min-h-screen">
   <aside class="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-zinc-200/70 bg-white/70 px-3 py-6 backdrop-blur md:flex">
-    <a routerLink="/likes" class="mb-8 flex items-center gap-2.5 px-3">
+    <a routerLink="/home" class="mb-8 flex items-center gap-2.5 px-3">
       <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500 text-white shadow-soft">
         <lucide-icon name="music-2" [size]="16"></lucide-icon>
       </span>

@@ -22,7 +22,19 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-sp = create_client()
+class _LazySpotify:
+    """The Spotify client, created on first use, so the backend starts without keys."""
+
+    def __init__(self):
+        self._client = None
+
+    def __getattr__(self, name):
+        if self._client is None:
+            self._client = create_client()
+        return getattr(self._client, name)
+
+
+sp = _LazySpotify()
 likes_job = sorter.Job(sorter.build_preview)
 setup_job = sorter.Job(setup_analysis.analyse)
 accuracy_job = sorter.Job(setup_analysis.check_accuracy)
@@ -118,8 +130,48 @@ def delete_artist_rule(artist_id):
 
 # --- Setup assistant ---
 
+def _keys_present():
+    return bool(os.getenv('SPOTIFY_CLIENT_ID') and os.getenv('SPOTIFY_CLIENT_SECRET'))
+
+
+def _logged_in():
+    return (config_store.DATA_DIR / '.spotify-token').exists()
+
+
+login_state = {'running': False}
+
+
+@app.route('/setup/login', methods=['POST'])
+def spotify_login():
+    """Opens the Spotify login page in the browser and waits for it in the background."""
+    if not _keys_present():
+        return jsonify({'error': 'Spotify keys are missing in src/backend/.env.'}), 400
+    if login_state['running']:
+        return jsonify(login_state), 202
+
+    def run():
+        login_state['running'] = True
+        try:
+            sp.me()
+        except Exception as e:
+            app.logger.warning('Spotify login: %s', e)
+        finally:
+            login_state['running'] = False
+
+    import threading
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({'running': True}), 202
+
+
 @app.route('/setup/status', methods=['GET'])
 def setup_status():
+    base = {'lastfm': bool(os.getenv('LASTFM_API_KEY')), 'ffmpeg': shutil.which('ffmpeg') is not None,
+            'configured': bool(config_store.load_config()['playlists'])}
+    if not _keys_present():
+        return jsonify({**base, 'spotify': {'connected': False, 'missing_keys': True}})
+    if not _logged_in():
+        return jsonify({**base, 'spotify': {'connected': False, 'needs_login': True,
+                                            'logging_in': login_state['running']}})
     try:
         me = sp.me()
         spotify = {'connected': True, 'name': me.get('display_name') or me.get('id'),

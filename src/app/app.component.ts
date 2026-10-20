@@ -14,6 +14,7 @@ export class AppComponent implements OnInit {
   inSetup = false;
 
   nav = [
+    { path: '/home', label: 'Home', icon: 'home' },
     { path: '/likes', label: 'Liked Songs', icon: 'heart' },
     { path: '/genres', label: 'Genres', icon: 'list-music' },
     { path: '/library', label: 'Library', icon: 'hard-drive' },
@@ -38,7 +39,10 @@ export class AppComponent implements OnInit {
           this.router.navigate(['/setup']);
         }
       },
-      error: () => this.backendDown = true,
+      error: () => {
+        this.backendDown = true;
+        this.router.navigate(['/setup']);
+      },
     });
   }
 }

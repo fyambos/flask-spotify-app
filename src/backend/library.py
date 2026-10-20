@@ -336,7 +336,7 @@ def _download_all(sp, root, config, plan, library, progress):
                                'downloaded_at': datetime.now().isoformat(timespec='seconds')}
             else:
                 tracks[tid] = {**info, 'path': None, 'folder': folder, 'status': 'failed',
-                               'error': 'Not found on YouTube Music'}
+                               'error': 'Could not be downloaded'}
             state['current'].remove(label(tid))
             state['done'] += 1
             report()

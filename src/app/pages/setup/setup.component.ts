@@ -43,16 +43,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   constructor(private playlistService: PlaylistService, private router: Router, private route: ActivatedRoute) { }
 
   ngOnInit(): void {
-    this.playlistService.getSetupStatus().subscribe(status => {
-      this.status = status;
-      this.reconfiguring = status.configured;
-      if (status.spotify.connected) {
-        this.loadPlaylists();
-        if (this.route.snapshot.queryParamMap.get('step') === 'choose') {
-          this.step = 'choose';
-        }
-      }
-    });
+    this.loadStatus();
     this.playlistService.getConfig().subscribe(config => {
       config.playlists.forEach(p => { this.selected.add(p.playlist_id); this.initiallySelected.add(p.playlist_id); });
       this.fallbackGenre = config.fallback_genre;
@@ -69,6 +60,37 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearInterval(this.poll);
+    clearInterval(this.loginPoll);
+  }
+
+  backendDown = false;
+  private loginPoll: any = null;
+
+  loadStatus(): void {
+    this.playlistService.getSetupStatus().subscribe({
+      next: status => {
+        this.backendDown = false;
+        this.status = status;
+        this.reconfiguring = status.configured;
+        if (status.spotify.connected) {
+          clearInterval(this.loginPoll);
+          this.loginPoll = null;
+          if (!this.playlists.length) this.loadPlaylists();
+          if (this.route.snapshot.queryParamMap.get('step') === 'choose') {
+            this.step = 'choose';
+          }
+        }
+      },
+      error: () => this.backendDown = true,
+    });
+  }
+
+  login(): void {
+    this.playlistService.spotifyLogin().subscribe(() => {
+      if (this.status) this.status.spotify.logging_in = true;
+      clearInterval(this.loginPoll);
+      this.loginPoll = setInterval(() => this.loadStatus(), 2000);
+    });
   }
 
   loadPlaylists(): void {

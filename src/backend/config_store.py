@@ -16,7 +16,7 @@ DEFAULT_CONFIG = {
     'music_dir': '~/Music/Spotify',
     'audio_format': 'mp3',
     # Songs from your other playlists that are not in your Liked Songs.
-    'non_liked': {'enabled': False, 'folder': 'Non-Liked Songs'},
+    'non_liked': {'enabled': True, 'folder': 'Non-Liked Songs'},
     # Downloaded songs that are no longer in any synced playlist: keep, move or delete.
     'removed': {'mode': 'move', 'folder': '_Removed'},
     # cookies.txt exported from a browser logged in to YouTube Music Premium (256 kbps audio).

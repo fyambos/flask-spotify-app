@@ -35,24 +35,46 @@
         already sorted them, you can adjust the sorting rules.
       </p>
 
-      <div class="mt-8 grid gap-3 sm:grid-cols-2">
-        <div class="card flex items-start gap-3 p-5">
-          <span class="flex h-9 w-9 items-center justify-center rounded-full"
+      <!-- Backend not running -->
+      <div *ngIf="backendDown" class="card mt-8 flex items-start gap-3 p-5">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+          <lucide-icon name="alert-triangle" [size]="18"></lucide-icon>
+        </span>
+        <div class="text-sm text-zinc-500">
+          <div class="font-medium text-zinc-900">Backend</div>
+          The backend is not running. Start it with <code class="rounded bg-zinc-100 px-1">python app.py</code> in src/backend, then reload.
+        </div>
+      </div>
+
+      <div *ngIf="!backendDown" class="mt-8 grid gap-3 sm:grid-cols-2">
+        <div class="card flex items-start gap-3 p-5" [class.sm:col-span-2]="status?.spotify?.missing_keys">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
                 [ngClass]="status?.spotify?.connected ? 'bg-brand-50 text-brand-600' : 'bg-zinc-100 text-zinc-400'">
-            <lucide-icon [name]="status?.spotify?.connected ? 'check-circle-2' : 'loader-2'" [size]="18"
+            <lucide-icon [name]="status?.spotify?.connected ? 'check-circle-2' : status ? 'log-in' : 'loader-2'" [size]="18"
                          [class.animate-spin]="!status"></lucide-icon>
           </span>
-          <div>
-            <div class="font-medium">Spotify</div>
-            <div *ngIf="status?.spotify?.connected" class="text-sm text-zinc-500">Connected as {{ status?.spotify?.name }}</div>
-            <div *ngIf="status && !status.spotify.connected" class="text-sm text-zinc-500">
-              Not connected. Fill <code class="rounded bg-zinc-100 px-1">SPOTIFY_CLIENT_ID</code> and
-              <code class="rounded bg-zinc-100 px-1">SPOTIFY_CLIENT_SECRET</code> in <code class="rounded bg-zinc-100 px-1">src/backend/.env</code>,
-              restart the backend and reload this page.
-            </div>
+          <div class="min-w-0 flex-1 text-sm text-zinc-500">
+            <div class="font-medium text-zinc-900">Spotify</div>
+            <div *ngIf="status?.spotify?.connected">Connected as {{ status?.spotify?.name }}</div>
+
+            <!-- No keys in .env -->
+            <ol *ngIf="status?.spotify?.missing_keys" class="mt-2 list-decimal space-y-1.5 pl-4">
+              <li>Create an app on <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2">developer.spotify.com/dashboard</a>. Your Spotify account needs Premium.</li>
+              <li>Redirect URI: <code class="rounded bg-zinc-100 px-1">http://127.0.0.1:8888/callback</code>. API: Web API.</li>
+              <li>Copy the Client ID and Client secret into <code class="rounded bg-zinc-100 px-1">src/backend/.env</code>, then restart the backend and reload.</li>
+            </ol>
+
+            <!-- Keys set, not logged in -->
+            <ng-container *ngIf="status?.spotify?.needs_login">
+              <div *ngIf="!status?.spotify?.logging_in">Not connected.</div>
+              <div *ngIf="status?.spotify?.logging_in">Log in on the Spotify page that opened in your browser.</div>
+              <button class="btn-primary mt-3" (click)="login()" [disabled]="status?.spotify?.logging_in">
+                <lucide-icon name="log-in" [size]="15"></lucide-icon> Log in to Spotify
+              </button>
+            </ng-container>
           </div>
         </div>
-        <div class="card flex items-start gap-3 p-5">
+        <div *ngIf="status" class="card flex items-start gap-3 p-5">
           <span class="flex h-9 w-9 items-center justify-center rounded-full"
                 [ngClass]="status?.lastfm ? 'bg-brand-50 text-brand-600' : 'bg-amber-50 text-amber-600'">
             <lucide-icon [name]="status?.lastfm ? 'check-circle-2' : 'alert-triangle'" [size]="18"></lucide-icon>

@@ -59,7 +59,8 @@
   <ng-container *ngIf="plan.pending_liked">{{ plan.pending_liked }} liked songs are not sorted yet. They are downloaded once sorted.</ng-container>
 </p>
 <div *ngIf="state && !state.plan && !state.job.running" class="card mt-6 p-5 text-sm text-zinc-500">
-  Click Check to see what will be downloaded.
+  <div class="font-medium text-zinc-900">Nothing downloaded yet</div>
+  Click Check to see what will be downloaded, then Sync.
 </div>
 
 <!-- Import -->
@@ -125,7 +126,7 @@
             (click)="tab = 'removed'; shown = 10">Removed <span class="text-zinc-400">{{ state.removed.length }}</span></button>
   </div>
   <p class="mt-2 text-xs text-zinc-400">
-    {{ tab === 'failed' ? 'Not found on YouTube Music. Retried at every sync.' : 'No longer in any synced playlist.' }}
+    {{ tab === 'failed' ? 'Could not be downloaded. Retried at every sync.' : 'No longer in any synced playlist.' }}
   </p>
   <ul class="card mt-3 divide-y divide-zinc-100 overflow-hidden">
     <li *ngFor="let t of list.slice(0, shown)" class="flex items-center gap-3 px-4 py-2.5">

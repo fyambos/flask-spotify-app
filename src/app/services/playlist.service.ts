@@ -87,7 +87,8 @@ export interface PlaylistStats {
 }
 
 export interface SetupStatus {
-  spotify: { connected: boolean; name?: string | null; image_url?: string | null; error?: string; limit?: string };
+  spotify: { connected: boolean; name?: string | null; image_url?: string | null; error?: string; limit?: string;
+             missing_keys?: boolean; needs_login?: boolean; logging_in?: boolean };
   lastfm: boolean;
   ffmpeg: boolean;
   configured: boolean;
@@ -172,6 +173,9 @@ export class PlaylistService {
     return this.http.get<SpotifyPlaylist[]>(`${this.apiUrl}/get-playlists`);
   }
 
+  spotifyLogin(): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/setup/login`, {});
+  }
   getSetupStatus(): Observable<SetupStatus> {
     return this.http.get<SetupStatus>(`${this.apiUrl}/setup/status`);
   }

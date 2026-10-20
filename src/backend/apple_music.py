@@ -5,8 +5,8 @@
 - removes from Apple Music the songs that are no longer in the local library
 
 Uses AppleScript (osascript). macOS asks once for permission to control Music.
-For moved files to keep working, disable Music > Settings > Files >
-"Copy files to Music Media folder when adding to library".
+Works whether or not Music copies the files to its own folder: the location of each
+song is updated after a move.
 """
 import json
 import platform

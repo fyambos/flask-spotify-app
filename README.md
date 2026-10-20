@@ -10,7 +10,7 @@ Runs on your computer: a Flask backend (`src/backend`) and an Angular web app (`
 - **Liked Songs**: classifies new liked songs, lets you review them, then adds them to the playlists on Spotify. Your Liked Songs are never modified.
 - **Genres**: rules per playlist (genres, excluded genres, album and title keywords), priority by drag and drop, misplaced songs with suggested rules.
 - **Library**: downloads the songs of your genre playlists into `<music folder>/<Genre>/`, writes every playlist you own as an `.m3u8` file, follows the changes you make on Spotify, imports files you downloaded before.
-- **Apple Music** (Mac): adds the songs and writes your playlists in a "Music Sorter" folder.
+- **Apple Music** (Mac): after each sync, adds the songs and writes your playlists in a "Music Sorter" folder.
 
 ## Requirements
 
@@ -94,7 +94,8 @@ Audio comes from YouTube Music through [spotDL](https://github.com/spotDL/spotif
 
 ### On your devices
 
-- **Mac / iPhone**: in Music → Settings → Files, turn off "Copy files to Music Media folder". Then use **Update Apple Music** on the Library page after each sync. Sync the iPhone from Finder, or with Sync Library (Apple Music or iTunes Match).
+- **Mac**: after each sync, the app adds the songs to Apple Music and writes your playlists in a "Music Sorter" folder (Library page → "After each sync", or the Update Apple Music button). macOS asks once for permission to control Music.
+- **iPhone**, set up once: with Apple Music or iTunes Match, turn on Sync Library on the Mac and the iPhone. Without it, in Finder select the iPhone, sync the "Music Sorter" playlists and turn on "Show this iPhone when on Wi-Fi": it syncs while the iPhone charges on the same Wi-Fi.
 - **Android**: copy the music folder to the phone, or keep it in sync with [Syncthing](https://syncthing.net). Poweramp, Samsung Music and VLC read the `.m3u8` playlists.
 - **Windows**: open the music folder in MusicBee, foobar2000 or VLC.
 

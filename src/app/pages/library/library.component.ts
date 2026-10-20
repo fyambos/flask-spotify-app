@@ -15,12 +15,19 @@ export class LibraryComponent implements OnInit, OnDestroy {
   importMode: 'copy' | 'move' = 'copy';
   unmatchedShown = 10;
   showUnmatched = false;
+  appleMusicAuto = true;
   private poll: any = null;
 
   constructor(private playlistService: PlaylistService, private dialog: MatDialog) { }
 
   ngOnInit(): void {
     this.refresh();
+    this.playlistService.getConfig().subscribe(config => this.appleMusicAuto = config.apple_music_auto);
+  }
+
+  toggleAppleMusicAuto(): void {
+    this.appleMusicAuto = !this.appleMusicAuto;
+    this.playlistService.updateSettings({ apple_music_auto: this.appleMusicAuto }).subscribe();
   }
 
   ngOnDestroy(): void {

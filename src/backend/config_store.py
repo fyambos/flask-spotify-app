@@ -22,6 +22,8 @@ DEFAULT_CONFIG = {
     'removed': {'mode': 'move', 'folder': '_Removed'},
     # cookies.txt exported from a browser logged in to YouTube Music Premium (256 kbps audio).
     'youtube_cookies': '',
+    # macOS: update Apple Music at the end of each library sync.
+    'apple_music_auto': True,
     # Genre that unmatched tracks go to once you review them (must be one of the playlists).
     'fallback_genre': 'Other',
     # Use the genre playlists a track's artist is already in.
@@ -144,7 +146,7 @@ def set_artist_rule(artist_id, artist_name, entry_id):
 
 def update_settings(changes):
     config = load_config()
-    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'removed', 'youtube_cookies'):
+    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'removed', 'youtube_cookies', 'apple_music_auto'):
         if key in changes:
             config[key] = changes[key]
     save_config(config)

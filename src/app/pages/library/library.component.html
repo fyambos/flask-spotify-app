@@ -147,9 +147,19 @@
   <div class="mt-4 grid gap-3 sm:grid-cols-3">
     <div class="card p-5 text-sm text-zinc-600">
       <div class="font-medium text-zinc-900">Mac and iPhone</div>
-      <p class="mt-2">Update Apple Music adds the songs and writes your playlists in a “Music Sorter” folder. Run it after each sync.</p>
-      <p class="mt-2">In Music → Settings → Files, turn off “Copy files to Music Media folder”.</p>
-      <p class="mt-2">Sync the iPhone from Finder, or with Sync Library if you have Apple Music or iTunes Match.</p>
+      <p class="mt-2">Apple Music gets the songs and your playlists, in a “Music Sorter” folder.</p>
+      <label *ngIf="state?.apple_music?.available" class="mt-3 flex cursor-pointer items-center justify-between gap-3">
+        <span class="font-medium text-zinc-900">After each sync</span>
+        <button type="button" role="switch" [attr.aria-checked]="appleMusicAuto" (click)="toggleAppleMusicAuto()"
+                class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition"
+                [ngClass]="appleMusicAuto ? 'bg-brand-500' : 'bg-zinc-200'">
+          <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-soft transition-all"
+                [ngClass]="appleMusicAuto ? 'left-[1.375rem]' : 'left-0.5'"></span>
+        </button>
+      </label>
+      <p class="mt-3">iPhone, set up once:</p>
+      <p class="mt-1">With Apple Music or iTunes Match, turn on Sync Library on the Mac and the iPhone. New songs arrive by themselves.</p>
+      <p class="mt-1">Without it, in Finder select the iPhone, sync the “Music Sorter” playlists and turn on “Show this iPhone when on Wi-Fi”. It syncs while the iPhone charges on the same Wi-Fi.</p>
       <button *ngIf="state?.apple_music?.available" class="btn-outline mt-4" (click)="updateAppleMusic()"
               [disabled]="state?.job?.running || state?.apple_music?.job?.running">
         <span *ngIf="state?.apple_music?.job?.running" class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="15"></lucide-icon></span>

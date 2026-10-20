@@ -233,6 +233,10 @@ def sync(sp, progress=None, apply=True):
     progress(step='Writing playlists')
     write_playlists(root, plan['playlists'], library)
     save_library(library)
+
+    import apple_music
+    if config.get('apple_music_auto') and apple_music.available():
+        apple_music.update(sp, progress)
     progress(step='Done')
     return plan
 

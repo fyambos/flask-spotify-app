@@ -22,6 +22,7 @@ export interface AppConfig {
   non_liked: { enabled: boolean; folder: string };
   removed: { mode: 'keep' | 'move' | 'delete'; folder: string };
   youtube_cookies: string;
+  apple_music_auto: boolean;
   artist_rules: { [artistId: string]: { name: string; playlist: string } };
   playlists: GenrePlaylist[];
 }

@@ -15,8 +15,11 @@ CONFIG_PATH = DATA_DIR / 'config.json'
 DEFAULT_CONFIG = {
     'music_dir': '~/Music/Spotify',
     'audio_format': 'mp3',
-    # Songs from your other playlists that are not in your Liked Songs.
-    'non_liked': {'enabled': True, 'folder': 'Non-Liked Songs'},
+    # Which playlists are downloaded: 'all', 'liked' (Liked Songs only) or 'selected'
+    # (genre playlists + the ids in 'playlists').
+    'download': {'mode': 'all', 'playlists': []},
+    # Folder for downloaded songs that are not in your Liked Songs.
+    'non_liked': {'folder': 'Non-Liked Songs'},
     # Downloaded songs that are no longer in any synced playlist: keep, move or delete.
     'removed': {'mode': 'move', 'folder': '_Removed'},
     # cookies.txt exported from a browser logged in to YouTube Music Premium (256 kbps audio).
@@ -53,6 +56,8 @@ def _new_id():
 def _normalize(config):
     if 'apple_folders' in config:  # renamed
         config.setdefault('playlist_folders', config.pop('apple_folders'))
+    if 'download' not in config and 'enabled' in config.get('non_liked', {}):  # replaced by 'download'
+        config['download'] = {'mode': 'all' if config['non_liked']['enabled'] else 'selected', 'playlists': []}
     config = {**DEFAULT_CONFIG, **config}
     for entry in config['playlists']:
         for field in RULE_FIELDS:
@@ -123,7 +128,7 @@ def set_artist_rule(artist_id, artist_name, entry_id):
 
 def update_settings(changes):
     config = load_config()
-    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'removed', 'youtube_cookies', 'apple_music_auto', 'playlist_folders', 'default_folder', 'folders'):
+    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'download', 'removed', 'youtube_cookies', 'apple_music_auto', 'playlist_folders', 'default_folder', 'folders'):
         if key in changes:
             config[key] = changes[key]
     save_config(config)

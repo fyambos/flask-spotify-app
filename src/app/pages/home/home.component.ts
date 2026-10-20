@@ -1,15 +1,26 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { APP_TITLE, FEATURES } from 'src/app/services/features';
+import { LibraryState, LikesState, PlaylistService } from 'src/app/services/playlist.service';
 
 @Component({
   selector: 'app-home',
   templateUrl: './home.component.html',
 })
-export class HomeComponent {
-  // Text from the user's own description of the app.
-  features = [
-    { path: '/library', icon: 'download', title: 'Download from Spotify as MP3', text: 'Create MP3 playlists that follow your Spotify playlists.' },
-    { path: '/library', icon: 'hard-drive', title: 'Send your MP3 playlists to your computers or phones', text: 'Listen without a music streaming platform.' },
-    { path: '/likes', icon: 'heart', title: 'Organize Liked Songs', text: 'Automatically organize liked songs into Spotify playlists of your choices.' },
-    { path: '/stats', icon: 'bar-chart-3', title: 'Spotify stats', text: 'See your Spotify stats.' },
-  ];
+export class HomeComponent implements OnInit {
+  title = APP_TITLE;
+  features = FEATURES;
+  library: LibraryState | null = null;
+  likes: LikesState | null = null;
+
+  constructor(private playlistService: PlaylistService) { }
+
+  ngOnInit(): void {
+    this.playlistService.getLibrary().subscribe(state => this.library = state);
+    this.playlistService.getLikesState().subscribe(state => this.likes = state);
+  }
+
+  count(status: string): number {
+    return (this.likes?.preview?.items || []).filter(i => status === 'planned'
+      ? i.status === 'auto' || i.status === 'manual' : i.status === status).length;
+  }
 }

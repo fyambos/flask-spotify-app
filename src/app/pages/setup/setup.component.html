@@ -29,11 +29,18 @@
 
     <!-- 1. Welcome / connect -->
     <section *ngIf="step === 'welcome'" class="mt-12">
-      <h1 class="text-3xl font-semibold tracking-tight">{{ reconfiguring ? 'Set up your genres again' : 'Welcome' }}</h1>
-      <p class="mt-2 max-w-xl text-zinc-500">
-        Music Sorter sorts your Liked Songs from Spotify into other Spotify playlists of your choosing. It learns how you
-        already sorted them, you can adjust the sorting rules.
-      </p>
+      <h1 class="text-3xl font-semibold tracking-tight">{{ reconfiguring ? 'Set up your genres again' : appTitle }}</h1>
+      <div class="mt-6 grid gap-2 sm:grid-cols-2">
+        <div *ngFor="let f of features" class="flex items-start gap-3 rounded-xl bg-white/60 p-3 ring-1 ring-zinc-900/5">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" [ngClass]="f.color">
+            <lucide-icon [name]="f.icon" [size]="16"></lucide-icon>
+          </span>
+          <div>
+            <div class="text-sm font-medium">{{ f.title }}</div>
+            <div class="text-sm text-zinc-500">{{ f.text }}</div>
+          </div>
+        </div>
+      </div>
 
       <!-- Backend not running -->
       <div *ngIf="backendDown" class="card mt-8 flex items-start gap-3 p-5">

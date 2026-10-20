@@ -3,7 +3,8 @@
 - Songs of the genre playlists are downloaded once into <music_dir>/<Genre>/ (the first
   genre playlist in priority order decides the folder).
 - Optionally, songs of your other playlists that are not in your Liked Songs go to
-  <music_dir>/<non_liked folder>/. Liked songs not sorted yet are not downloaded.
+  <music_dir>/<non_liked folder>/, depending on Settings > Playlists to download (all
+  playlists, Liked Songs only, or a chosen list). Liked songs not sorted yet are not downloaded.
 - Every playlist you own (genre playlists, other playlists, Liked Songs) is written as an
   .m3u8 file in <music_dir>/Playlists/, pointing to the downloaded files. Nothing is
   downloaded twice.
@@ -82,6 +83,8 @@ def build_plan(sp, progress):
     root = music_root(config)
     library = load_library()
     non_liked = config['non_liked']
+    download = config.get('download') or {'mode': 'all', 'playlists': []}
+    chosen = set(download.get('playlists') or [])
 
     progress(step='Reading your Liked Songs')
     liked = liked_tracks(sp)
@@ -99,6 +102,8 @@ def build_plan(sp, progress):
         contents[entry['playlist_id']] = {'name': entry['name'], 'track_ids': [t['id'] for t in tracks]}
         for t in tracks:
             meta.setdefault(t['id'], t)
+            if download['mode'] == 'liked' and t['id'] not in liked_set:
+                continue
             desired.setdefault(t['id'], safe_name(entry['name']))
 
     progress(step='Reading your other playlists')
@@ -120,7 +125,7 @@ def build_plan(sp, progress):
                 continue
             if t['id'] in liked_set:
                 pending_liked.add(t['id'])
-            elif non_liked['enabled']:
+            elif download['mode'] == 'all' or (download['mode'] == 'selected' and p['id'] in chosen):
                 desired[t['id']] = safe_name(non_liked['folder'])
     contents[LIKED_PLAYLIST_ID] = {'name': LIKED_PLAYLIST_NAME, 'track_ids': liked_ids}
 

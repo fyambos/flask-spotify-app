@@ -1,16 +1,45 @@
-<h1 class="page-title">Spotify Organizer &amp; Music Downloader</h1>
-<p class="page-subtitle">Sync with Spotify.</p>
+<section class="relative overflow-hidden rounded-3xl bg-zinc-900 px-6 py-8 text-white shadow-lift sm:px-8">
+  <div class="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-brand-500/30 blur-3xl"></div>
+  <div class="pointer-events-none absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-violet-500/20 blur-3xl"></div>
 
-<div class="mt-8 grid gap-3 sm:grid-cols-2">
-  <a *ngFor="let f of features" [routerLink]="f.path"
-     class="card group flex items-start gap-4 p-5 transition hover:ring-zinc-300">
-    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600">
-      <lucide-icon [name]="f.icon" [size]="18"></lucide-icon>
-    </span>
-    <div class="min-w-0 flex-1">
-      <div class="font-medium">{{ f.title }}</div>
-      <p class="mt-0.5 text-sm text-zinc-500">{{ f.text }}</p>
+  <div class="relative">
+    <h1 class="text-3xl font-semibold tracking-tight">{{ title }}</h1>
+    <p class="mt-1 text-zinc-400">Sync with Spotify.</p>
+
+    <div class="mt-8 grid gap-3 sm:grid-cols-3">
+      <a routerLink="/library" class="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 transition hover:bg-white/10">
+        <div class="text-xs font-medium uppercase tracking-wide text-zinc-400">Downloaded</div>
+        <div class="mt-1 text-2xl font-semibold tabular-nums">{{ library?.downloaded ?? '–' }}</div>
+        <div class="text-sm text-zinc-400">{{ library?.playlists ?? 0 }} playlists</div>
+      </a>
+      <a routerLink="/library" class="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 transition hover:bg-white/10">
+        <div class="text-xs font-medium uppercase tracking-wide text-zinc-400">To download</div>
+        <div class="mt-1 text-2xl font-semibold tabular-nums">{{ library?.plan?.to_download ?? '–' }}</div>
+        <div class="flex items-center gap-1 text-sm text-brand-300">
+          Sync <lucide-icon name="arrow-right" [size]="14"></lucide-icon>
+        </div>
+      </a>
+      <a routerLink="/likes" class="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 transition hover:bg-white/10">
+        <div class="text-xs font-medium uppercase tracking-wide text-zinc-400">Liked Songs to review</div>
+        <div class="mt-1 text-2xl font-semibold tabular-nums">{{ likes?.preview ? count('review') : '–' }}</div>
+        <div class="flex items-center gap-1 text-sm text-brand-300">
+          {{ likes?.preview ? count('planned') + ' ready to add' : 'Analyse my likes' }} <lucide-icon name="arrow-right" [size]="14"></lucide-icon>
+        </div>
+      </a>
     </div>
-    <span class="mt-1 inline-flex text-zinc-300 transition group-hover:text-zinc-500"><lucide-icon name="arrow-right" [size]="16"></lucide-icon></span>
+  </div>
+</section>
+
+<div class="mt-6 grid gap-3 sm:grid-cols-2">
+  <a *ngFor="let f of features" [routerLink]="f.path"
+     class="card group flex flex-col p-5 transition hover:-translate-y-0.5 hover:shadow-lift">
+    <span class="flex h-11 w-11 items-center justify-center rounded-2xl" [ngClass]="f.color">
+      <lucide-icon [name]="f.icon" [size]="20"></lucide-icon>
+    </span>
+    <div class="mt-4 font-semibold">{{ f.title }}</div>
+    <p class="mt-1 flex-1 text-sm text-zinc-500">{{ f.text }}</p>
+    <span class="mt-4 inline-flex items-center gap-1 text-sm font-medium text-zinc-400 transition group-hover:text-zinc-900">
+      Open <lucide-icon name="arrow-right" [size]="14"></lucide-icon>
+    </span>
   </a>
 </div>

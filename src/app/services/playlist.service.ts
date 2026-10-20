@@ -19,7 +19,8 @@ export interface AppConfig {
   fallback_genre: string;
   artist_history: { enabled: boolean; min_share: number };
   multi_playlist: boolean;
-  non_liked: { enabled: boolean; folder: string };
+  non_liked: { folder: string };
+  download: { mode: 'all' | 'liked' | 'selected'; playlists: string[] };
   removed: { mode: 'keep' | 'move' | 'delete'; folder: string };
   youtube_cookies: string;
   apple_music_auto: boolean;

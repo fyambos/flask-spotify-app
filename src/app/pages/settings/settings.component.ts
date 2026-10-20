@@ -16,6 +16,14 @@ export class SettingsComponent implements OnInit {
   sortMessage = '';
   rememberedArtists: { id: string; name: string; playlist: string }[] = [];
   playlistNames: { [id: string]: string } = {};
+  downloadChoices: { id: string; name: string; genre: boolean }[] = [];
+  downloadSearch = '';
+  downloadShown = 8;
+  downloadModes: { id: 'all' | 'liked' | 'selected'; label: string; hint: string }[] = [
+    { id: 'all', label: 'All playlists', hint: 'Every song of your playlists.' },
+    { id: 'liked', label: 'Liked Songs only', hint: 'Only the songs in your Liked Songs.' },
+    { id: 'selected', label: 'Choose playlists', hint: 'Your genre playlists and the playlists you check below.' },
+  ];
 
   constructor(private playlistService: PlaylistService, private dialog: MatDialog) { }
 
@@ -25,7 +33,10 @@ export class SettingsComponent implements OnInit {
       this.computeLists();
     });
     this.playlistService.getPlaylists().subscribe(playlists => this.playlists = playlists.filter(p => p.owned));
-    this.playlistService.getLibrary().subscribe(state => this.playlistNames = state.playlist_names);
+    this.playlistService.getLibrary().subscribe(state => {
+      this.playlistNames = state.playlist_names;
+      this.computeLists();
+    });
 
   }
 
@@ -36,6 +47,39 @@ export class SettingsComponent implements OnInit {
     this.rememberedArtists = Object.entries(config.artist_rules).map(([id, rule]) => ({
       id, name: rule.name, playlist: config.playlists.find(p => p.id === rule.playlist)?.name || '—',
     })).sort((a, b) => a.name.localeCompare(b.name));
+    const genreIds = new Set(config.playlists.map(p => p.playlist_id));
+    this.downloadChoices = Object.entries(this.playlistNames)
+      .filter(([id]) => id !== 'liked')
+      .map(([id, name]) => ({ id, name: name.replace(/^[\s\u2800\u3164\u200b]+|[\s\u2800\u3164\u200b]+$/g, ''), genre: genreIds.has(id) }))
+      .sort((a, b) => Number(b.genre) - Number(a.genre) || a.name.localeCompare(b.name));
+  }
+
+  get modeHint(): string {
+    return this.downloadModes.find(m => m.id === this.config?.download.mode)?.hint || '';
+  }
+
+  get visibleChoices() {
+    const term = this.downloadSearch.trim().toLowerCase();
+    const list = term ? this.downloadChoices.filter(c => c.name.toLowerCase().includes(term)) : this.downloadChoices;
+    return term ? list : list.slice(0, this.downloadShown);
+  }
+
+  setMode(mode: 'all' | 'liked' | 'selected'): void {
+    if (!this.config) return;
+    this.config.download = { ...this.config.download, mode };
+    this.saveSettings();
+  }
+
+  isChosen(id: string): boolean {
+    return !!this.config?.download.playlists.includes(id);
+  }
+
+  toggleChoice(id: string): void {
+    if (!this.config) return;
+    const chosen = new Set(this.config.download.playlists);
+    chosen.has(id) ? chosen.delete(id) : chosen.add(id);
+    this.config.download = { ...this.config.download, playlists: [...chosen] };
+    this.saveSettings();
   }
 
   trackById(_: number, item: { id: string }): string {
@@ -44,8 +88,8 @@ export class SettingsComponent implements OnInit {
 
   saveSettings(): void {
     if (!this.config) return;
-    const { music_dir, audio_format, artist_history, multi_playlist, non_liked, removed, youtube_cookies } = this.config;
-    this.playlistService.updateSettings({ music_dir, audio_format, artist_history, multi_playlist, non_liked, removed, youtube_cookies }).subscribe(() => {
+    const { music_dir, audio_format, artist_history, multi_playlist, non_liked, download, removed, youtube_cookies } = this.config;
+    this.playlistService.updateSettings({ music_dir, audio_format, artist_history, multi_playlist, non_liked, download, removed, youtube_cookies }).subscribe(() => {
       this.savedAt = Date.now();
       setTimeout(() => this.savedAt = 0, 2000);
     });

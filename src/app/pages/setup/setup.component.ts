@@ -4,6 +4,7 @@ import {
   GenrePlaylist, JobState, PlaylistService, PlaylistStats, RuleSuggestion, SetupStatus, SpotifyPlaylist,
 } from 'src/app/services/playlist.service';
 import { applySuggestion, suggestionKey } from 'src/app/services/rule-suggestions';
+import { APP_TITLE, FEATURES } from 'src/app/services/features';
 
 type Step = 'welcome' | 'choose' | 'analysing' | 'review';
 
@@ -13,6 +14,8 @@ type Step = 'welcome' | 'choose' | 'analysing' | 'review';
 })
 export class SetupComponent implements OnInit, OnDestroy {
   step: Step = 'welcome';
+  appTitle = APP_TITLE;
+  features = FEATURES;
   steps: { id: Step; label: string }[] = [
     { id: 'welcome', label: 'Connect' },
     { id: 'choose', label: 'Choose playlists' },

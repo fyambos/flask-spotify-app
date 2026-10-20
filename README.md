@@ -1,132 +1,129 @@
-# Playlist Manager
-> A web application for managing Spotify playlists with Firestore integration. Users can sort tracks by genre, edit playlists, and delete playlists.
+# Music Sorter
+
+Sorts your Spotify Liked Songs into Spotify playlists of your choosing, and keeps a local copy of your playlists (MP3 files + `.m3u8` playlists) for Apple Music, Android or Windows.
+
+Runs on your computer: a Flask backend (`src/backend`) and an Angular web app (`src/app`). Nothing is hard-coded: everything is configured from the app and saved in `src/backend/data/`.
 
 ## Features
-* Display Saved Playlists: View saved playlists with album artwork and details fetched from Spotify.
-* Edit Genres: Edit playlist genres in a user-friendly modal, with real-time updates in Firestore.
-* Delete Playlists: Delete playlists with a confirmation dialog to ensure no accidental deletions.
-* Sort Playlists: Automatically sort tracks into genre-specific playlists using Spotify data.
 
-## Directory Structure
-```plain text
-root/
-├── src/
-│   ├── app/                 # Angular components and services
-│   ├── assets/              # Static assets like images and icons
-│   ├── environments/        # Environment configurations
-├── backend/                 # Backend logic (Python Flask app with Spotify integration)
-├── package.json             # Frontend dependencies
-└── README.md                # Project documentation
+- **Setup assistant**: pick your genre playlists. The app learns how they are sorted (genres, artists, album keywords), shows how accurate the rules are and proposes fixes.
+- **Liked Songs**: classifies new liked songs, lets you review them, then adds them to the playlists on Spotify. Your Liked Songs are never modified.
+- **Genres**: rules per playlist (genres, excluded genres, album and title keywords), priority by drag and drop, misplaced songs with suggested rules.
+- **Library**: downloads the songs of your genre playlists into `<music folder>/<Genre>/`, writes every playlist you own as an `.m3u8` file, follows the changes you make on Spotify, imports files you downloaded before.
+- **Apple Music** (Mac): adds the songs and writes your playlists in a "Music Sorter" folder.
+
+## Requirements
+
+- Python 3.10+
+- Node.js 18+
+- ffmpeg
+  - Mac: `brew install ffmpeg`
+  - Windows: `winget install ffmpeg`
+  - Linux: `sudo apt install ffmpeg`
+- A Spotify account with **Premium** (required by Spotify for developer apps since February 2026)
+- Optional: a Last.fm API key (much better genres), a YouTube Music Premium account (256 kbps downloads)
+
+## Setup on a new computer
+
+### 1. Spotify and Last.fm keys
+
+1. Go to the [Spotify developer dashboard](https://developer.spotify.com/dashboard) → **Create app**.
+   - Redirect URI: `http://127.0.0.1:8888/callback` (Spotify no longer accepts `localhost`)
+   - API: **Web API**
+   - In **Settings**, copy the **Client ID** and the **Client secret**.
+2. Optional: create a Last.fm API account at https://www.last.fm/api/account/create and copy the **API key**.
+3. Create the backend `.env` file:
+
+```bash
+cp src/backend/.env.example src/backend/.env
 ```
 
-## Prerequisites
-### Frontend
-* Node.js: Install Node.js for the Angular application.
-* Angular CLI: Install the Angular CLI globally: npm install -g @angular/cli.
+Fill `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` and `LASTFM_API_KEY`.
 
-### Backend
-* Python: Ensure Python 3.7+ is installed.
-* Spotify API: Set up a Spotify Developer Account and retrieve your client ID and client secret.
-* Firestore: Configure a Firebase project and download the Firebase Admin SDK JSON.
+### 2. Backend
 
-## Setup
-### Frontend Setup
-1. Navigate to the src directory:
 ```bash
-cd src
-```
-2. Install dependencies:
-```bash
-npm install
-```
-3. Install angular CLI:
-```bash
-npm install -g @angular/cli
-```
-4. Start the development server:
-```bash
-ng serve
-```
-5. Access the app at http://localhost:4200.
-
-### Backend Setup
-1. Navigate to the backend directory:
-```bash
-cd backend
-```
-2. Install required Python packages:
-```bash
+cd src/backend
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-3. Run the Flask server:
-```bash
 python app.py
 ```
 
-## Configuration
-### Spotify API
-Add your Spotify API credentials to the backend configuration:
-> Client ID and Client Secret in an .env file (no name) in the same directory as app.py.
+The API runs on http://localhost:5001 (port 5000 is used by AirPlay on macOS). On the first start, a browser window opens to log in to Spotify.
+
+### 3. Web app
+
 ```bash
-SPOTIFY_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxx
-SPOTIFY_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+npm install
+npm start
 ```
 
-### Firebase Firestore
-Replace the Firebase Admin SDK JSON path in the backend with your Firebase credentials:
-```python
-cred = credentials.Certificate('/path/to/firebase-admin-sdk.json')
+Open http://localhost:4200. The setup assistant opens on the first launch.
+
+### Moving to another computer
+
+Your settings and rules are in `src/backend/data/config.json`, and the list of downloaded songs in `src/backend/data/library.json`. Copy the `data` folder next to the new backend, or set `SPOTSORT_DATA_DIR` in `.env` to a synced folder (iCloud Drive, Dropbox…). Copy your music folder too, or import it from the Library page.
+
+## How sorting works
+
+For each liked song not yet in one of your genre playlists:
+
+1. a choice you remembered for its artist
+2. album and title keywords, in priority order
+3. artist history: the playlist that already holds most of the artist's songs
+4. genres (Spotify + Last.fm), the closest playlist wins when several match
+5. otherwise the song goes to your review list
+
+Excluded genres apply to every step. Songs you already placed are never moved by the rules.
+
+**Several playlists per song** (Settings): a song can go to every playlist whose album or title keywords match, plus its style playlist. Downloads use the first one.
+
+## Library
+
+- **Check** shows what the next sync will do. **Sync** downloads the missing songs, moves the ones you moved on Spotify and rewrites the playlists.
+- Folder of a song: its first genre playlist, in priority order.
+- **Non-Liked Songs** (Settings): also download songs of your other playlists that are not in your Liked Songs, into their own folder.
+- **Removed songs** (Settings): songs no longer in any synced playlist are kept, moved to a folder (default `_Removed`) or deleted.
+- **Import existing files**: matches files you downloaded before (by Spotify link, or artist + title + duration) and moves them to the folder of their current playlist, without downloading them again.
+- Playlists are written to `<music folder>/Playlists/*.m3u8` with relative paths, so the whole folder can be copied anywhere.
+
+Tags written: title, artists, album, album artist, track and disc number, year, cover, ISRC, genre (the artist's first Spotify genre) and the Spotify id.
+
+Audio comes from YouTube Music through [spotDL](https://github.com/spotDL/spotify-downloader). Without Premium the source is about 130 kbps. With a YouTube Music Premium account, export your YouTube cookies to a `cookies.txt` file (browser extension "Get cookies.txt LOCALLY") and set its path in Settings to get 256 kbps.
+
+### On your devices
+
+- **Mac / iPhone**: in Music → Settings → Files, turn off "Copy files to Music Media folder". Then use **Update Apple Music** on the Library page after each sync. Sync the iPhone from Finder, or with Sync Library (Apple Music or iTunes Match).
+- **Android**: copy the music folder to the phone, or keep it in sync with [Syncthing](https://syncthing.net). Poweramp, Samsung Music and VLC read the `.m3u8` playlists.
+- **Windows**: open the music folder in MusicBee, foobar2000 or VLC.
+
+## Command line
+
+```bash
+cd src/backend
+python analyze.py                  # genres of the songs in your genre playlists -> data/reports/genre-analysis.md
+python analyze.py --list-playlists # your Spotify playlists with their ids
 ```
-Steps to Obtain Firebase Admin SDK JSON:
-1. Go to Firebase Console: Navigate to your Firebase project at https://console.firebase.google.com.
-2. Go to Project Settings:
-    * In the top left corner, click on the gear icon (⚙️) and select Project Settings.
-3. Create a Service Account:
-    * Go to the Service accounts tab.
-    * Click on Generate new private key. This will download a JSON file to your computer. This file contains all the necessary credentials to allow server-side access to Firebase services.
 
-### Angular Environment
-Update src/environments/env.dev.ts with your Firebase configuration:
-```typescript
-export const environment = {
-  production: false,
-  firebase: {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID",
-  },
-};
+## Project structure
+
+```plain text
+src/
+├── app/                      Angular web app
+└── backend/
+    ├── app.py                API
+    ├── config_store.py       settings and rules (data/config.json)
+    ├── spotify_client.py     Spotify Web API (2026 changes)
+    ├── genres.py             Spotify + Last.fm genres, keyword matching
+    ├── sorter.py             liked songs classification
+    ├── setup_analysis.py     rule learning, accuracy, suggestions
+    ├── library.py            downloads, .m3u8 playlists, import
+    ├── apple_music.py        Apple Music sync (macOS)
+    ├── analyze.py            genre analysis (command line)
+    └── data/                 (git-ignored) settings, Spotify token, caches, library
 ```
-
-## Usage
-1. **Adding and Viewing Playlists**: Navigate to the home page to see saved playlists with album covers, names, and genres.
-    * You define how to sort your tracks into specific playlists, for this, simply add those specific playlists via the add button, and define the spotify genres that should be associated with this playlist. This feature helps you categorize your tracks based on their genres.
-    * You can find the spotify genres [here](https://gist.github.com/andytlr/4104c667a62d8145aa3a).
-    * You can also see the song's genres in the Flask node of app.py when sorting playlists.
-2. **Editing Genres**:
-    * Click the "Edit" icon to modify genres.
-    * Save changes to update Firestore in real-time.
-3. **Deleting Playlists**:
-    * Click the "Delete" icon to open a confirmation dialog.
-    * Confirm to delete the playlist from Firestore.
-4. **Sorting Playlists**:
-    * Use the /sort-playlist endpoint in the backend to sort tracks into genre-specific playlists.
-
-## Tech Stack
-* **Frontend**: Angular, Tailwind CSS
-* **Backend**: Python Flask
-* **Database**: Firebase Firestore
-* **Music API**: Spotify Web API
-
-## Contributing
-1. Fork the repository.
-2. Create a feature branch: git checkout -b feature-name.
-3. Commit your changes: git commit -m "Add feature description".
-4. Push to the branch: git push origin feature-name.
-5. Open a pull request.
 
 ## License
-This project is licensed under the MIT License. See the LICENSE file for details.
+
+MIT

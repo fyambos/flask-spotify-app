@@ -1,23 +1,28 @@
 """Keep Apple Music (macOS Music app) in line with the local library.
 
 - adds the downloaded songs to the Music library (once), and fixes their location after a move
-- writes every playlist into a "Music Sorter" folder in Apple Music, in Spotify order
+- writes every playlist in Spotify order, reusing the Apple Music playlist with the same
+  name (it keeps its cover and folder); missing ones are created (genre playlists in
+  the "Genres" folder if it exists, the others at the top level)
+- removes the "Music Sorter" folder made by earlier versions
 - removes from Apple Music the songs that are no longer in the local library
 
 Uses AppleScript (osascript). macOS asks once for permission to control Music.
 Works whether or not Music copies the files to its own folder: the location of each
 song is updated after a move.
 """
-import json
 import platform
+import re
 import subprocess
+import unicodedata
 import tempfile
 from pathlib import Path
 
 import config_store
 import library
 
-FOLDER_NAME = 'Music Sorter'
+OLD_FOLDER = 'Music Sorter'
+GENRES_FOLDER = 'Genres'
 
 
 def available():
@@ -79,41 +84,78 @@ on run argv
 end run
 '''
 
-# Lines: "P" TAB <playlist name>, followed by "T" TAB <persistent id> lines, in order.
+# Prints one line per playlist: <persistent id> TAB <name> TAB <parent folder or empty> TAB <class> TAB <special kind>
+LIST_PLAYLISTS = r'''
+on run argv
+    set out to ""
+    tell application "Music"
+        repeat with p in (every playlist)
+            try
+                set par to name of parent of p
+            on error
+                set par to ""
+            end try
+            set out to out & (persistent ID of p) & tab & (name of p) & tab & par & tab & ((class of p) as text) & tab & ((special kind of p) as text) & linefeed
+        end repeat
+    end tell
+    return out
+end run
+'''
+
+DELETE_OLD_FOLDER = r'''
+on run argv
+    tell application "Music"
+        if exists folder playlist "''' + OLD_FOLDER + r'''" then delete folder playlist "''' + OLD_FOLDER + r'''"
+    end tell
+end run
+'''
+
+# Lines: "P" TAB <spotify id> TAB <apple persistent id or empty> TAB <folder for a new playlist or empty> TAB <name>
+#        followed by "T" TAB <track persistent id> lines, in order.
+# Existing playlists are emptied and filled again (they keep their cover and folder).
+# Prints "C" TAB <spotify id> TAB <persistent id> for each playlist it creates.
 WRITE_PLAYLISTS = r'''
 on run argv
     set lines_ to paragraphs of (read (POSIX file (item 1 of argv)) as «class utf8»)
+    set out to ""
     tell application "Music"
-        if not (exists folder playlist "''' + FOLDER_NAME + r'''") then
-            make new folder playlist with properties {name:"''' + FOLDER_NAME + r'''"}
-        end if
-        set f to folder playlist "''' + FOLDER_NAME + r'''"
         set pl to missing value
         repeat with l in lines_
             set l to l as text
             if l is not "" then
-                set kind_ to text 1 of l
-                set value_ to text 3 thru -1 of l
-                if kind_ is "P" then
+                set AppleScript's text item delimiters to tab
+                set parts to text items of l
+                set AppleScript's text item delimiters to ""
+                if item 1 of parts is "P" then
+                    set sid to item 2 of parts
+                    set pid to item 3 of parts
+                    set folderName to item 4 of parts
+                    set playlistName to item 5 of parts
                     set pl to missing value
-                    repeat with candidate in (user playlists whose name is value_)
+                    if pid is not "" then
                         try
-                            if (name of parent of candidate) is "''' + FOLDER_NAME + r'''" then set pl to contents of candidate
+                            set pl to (first user playlist whose persistent ID is pid)
                         end try
-                    end repeat
+                    end if
                     if pl is missing value then
-                        set pl to make new user playlist at f with properties {name:value_}
+                        if folderName is not "" and (exists folder playlist folderName) then
+                            set pl to make new user playlist at folder playlist folderName with properties {name:playlistName}
+                        else
+                            set pl to make new user playlist with properties {name:playlistName}
+                        end if
+                        set out to out & "C" & tab & sid & tab & (persistent ID of pl) & linefeed
                     else
                         delete every track of pl
                     end if
-                else if kind_ is "T" and pl is not missing value then
+                else if item 1 of parts is "T" and pl is not missing value then
                     try
-                        duplicate (first track of library playlist 1 whose persistent ID is value_) to pl
+                        duplicate (first track of library playlist 1 whose persistent ID is (item 2 of parts)) to pl
                     end try
                 end if
             end if
         end repeat
     end tell
+    return out
 end run
 '''
 
@@ -134,12 +176,51 @@ end run
 '''
 
 
+def _existing_playlists():
+    """[(persistent id, name, parent)] of the user playlists, except system ones and the old folder."""
+    result = []
+    for line in _run(LIST_PLAYLISTS, '').splitlines():
+        parts = line.split('\t')
+        if (len(parts) >= 5 and parts[3] == 'user playlist' and parts[4] in ('none', 'missing value', '')
+                and parts[2] != OLD_FOLDER):
+            result.append((parts[0], parts[1], parts[2]))
+    return result
+
+
+def _strip(name):
+    return name.strip(library.INVISIBLE + ' ').lower()
+
+
+def _core(name):
+    """Letters and digits only: '𐙚⋆.˚ gallery' and 'gallery' are the same playlist."""
+    return re.sub(r'[^a-z0-9]+', '', unicodedata.normalize('NFKD', name.lower()).encode('ascii', 'ignore').decode())
+
+
+def _find_playlist(spotify_id, name, links, existing):
+    """The Apple Music playlist to reuse for a Spotify playlist: linked before, else same name."""
+    pids = {pid for pid, _, _ in existing}
+    if links.get(spotify_id) in pids:
+        return links[spotify_id]
+    taken = {pid for sid, pid in links.items() if sid != spotify_id}
+    for pid, apple_name, _ in existing:
+        if apple_name == name and pid not in taken:
+            return pid
+    for pid, apple_name, _ in existing:
+        if _strip(apple_name) == _strip(name) and pid not in taken:
+            return pid
+    for pid, apple_name, _ in existing:
+        if _core(name) and _core(apple_name) == _core(name) and pid not in taken:
+            return pid
+    return ''
+
+
 def update(sp=None, progress=None):
     """Bring Apple Music in line with the local library and the playlists of the last sync."""
     progress = progress or (lambda **kw: None)
     if not available():
         raise RuntimeError('Apple Music is only available on macOS.')
-    root = library.music_root(config_store.load_config())
+    config = config_store.load_config()
+    root = library.music_root(config)
     lib = library.load_library()
     plan = library.load_plan()
     if not plan:
@@ -165,13 +246,27 @@ def update(sp=None, progress=None):
                 r.pop('apple_id', None)
         library.save_library(lib)
 
+    progress(step='Removing the old Music Sorter folder')
+    _run(DELETE_OLD_FOLDER, '')
+
     progress(step='Writing playlists in Apple Music')
+    existing = _existing_playlists()
+    links = lib.setdefault('apple_playlists', {})
+    genre_ids = {p['playlist_id'] for p in config['playlists']}
     lines = []
-    for info in plan['playlists'].values():
+    for spotify_id, info in plan['playlists'].items():
         ids = [tracks[t]['apple_id'] for t in info['track_ids'] if tracks.get(t, {}).get('apple_id')]
-        if ids:
-            lines.append(f"P\t{info['name'].strip(library.INVISIBLE + ' ')}")
-            lines.extend(f'T\t{pid}' for pid in ids)
-    _run(WRITE_PLAYLISTS, '\n'.join(lines))
+        pid = _find_playlist(spotify_id, info['name'], links, existing)
+        folder = GENRES_FOLDER if spotify_id in genre_ids else ''
+        lines.append(f"P\t{spotify_id}\t{pid}\t{folder}\t{info['name']}")
+        lines.extend(f'T\t{track}' for track in ids)
+        if pid:
+            links[spotify_id] = pid
+    for line in _run(WRITE_PLAYLISTS, '\n'.join(lines)).splitlines():
+        parts = line.split('\t')
+        if len(parts) == 3 and parts[0] == 'C':
+            links[parts[1]] = parts[2].strip()
+    library.save_library(lib)
+
     progress(step='Done')
-    return {'songs': sum(1 for r in tracks.values() if r.get('apple_id'))}
+    return {'songs': sum(1 for r in tracks.values() if r.get('apple_id')), 'playlists': len(links)}

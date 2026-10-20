@@ -20,6 +20,7 @@ from urllib3.util.retry import Retry
 from config_store import DATA_DIR
 
 CACHE_PATH = DATA_DIR / 'cache' / 'spotify.json'
+BLOCK_PATH = DATA_DIR / 'spotify-blocked-until.txt'
 MAX_WAIT = 30          # seconds; a longer "Retry-After" means the daily quota is used up
 SNAPSHOT_TTL = 300     # seconds the list of playlist snapshots is reused
 _lock = threading.Lock()
@@ -33,14 +34,39 @@ class SpotifyLimitError(RuntimeError):
         self.retry_after = retry_after
 
 
+def _blocked_until():
+    try:
+        return float(BLOCK_PATH.read_text())
+    except (OSError, ValueError):
+        return 0
+
+
+def _block(retry_after):
+    """Remember the end of the block, so no request is sent before it (requests made
+    during a block seem to make Spotify extend it)."""
+    BLOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BLOCK_PATH.write_text(str(time.time() + retry_after))
+
+
 class _LimitedRetry(Retry):
     """Waits for short rate limits, stops at once when Spotify asks to wait for hours."""
 
     def get_retry_after(self, response):
         retry_after = super().get_retry_after(response)
         if retry_after is not None and retry_after > MAX_WAIT:
+            _block(retry_after)
             raise SpotifyLimitError(retry_after)
         return retry_after
+
+
+class _BlockAwareSession(requests.Session):
+    """Refuses to send anything to Spotify while it has blocked the app."""
+
+    def request(self, method, url, *args, **kwargs):
+        remaining = _blocked_until() - time.time()
+        if remaining > 0 and 'api.spotify.com' in str(url):
+            raise SpotifyLimitError(remaining)
+        return super().request(method, url, *args, **kwargs)
 
 SCOPE = ' '.join([
     'user-library-read',
@@ -73,6 +99,7 @@ def create_client():
         open_browser=True,
     )
     sp = spotipy.Spotify(auth_manager=auth, requests_timeout=20, retries=5)
+    sp._session = _BlockAwareSession()
     retry = _LimitedRetry(total=5, connect=None, read=False, status=5, backoff_factor=0.5,
                           allowed_methods=frozenset(['GET', 'POST', 'PUT', 'DELETE']),
                           status_forcelist=(429, 500, 502, 503, 504))

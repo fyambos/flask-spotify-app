@@ -87,7 +87,7 @@ export interface PlaylistStats {
 }
 
 export interface SetupStatus {
-  spotify: { connected: boolean; name?: string; image_url?: string | null; error?: string };
+  spotify: { connected: boolean; name?: string | null; image_url?: string | null; error?: string; limit?: string };
   lastfm: boolean;
   ffmpeg: boolean;
   configured: boolean;

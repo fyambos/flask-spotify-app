@@ -30,6 +30,9 @@ export class AppComponent implements OnInit {
     this.playlistService.getSetupStatus().subscribe({
       next: (status) => {
         this.status = status;
+        if (status.spotify.limit) {
+          this.notice.show(status.spotify.limit);
+        }
         // First launch: nothing configured yet, start with the setup assistant.
         if (!status.configured || !status.spotify.connected) {
           this.router.navigate(['/setup']);

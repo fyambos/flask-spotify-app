@@ -124,6 +124,9 @@ def setup_status():
         me = sp.me()
         spotify = {'connected': True, 'name': me.get('display_name') or me.get('id'),
                    'image_url': (me.get('images') or [{}])[0].get('url')}
+    except SpotifyLimitError as e:
+        # Connected, but Spotify has blocked the app for now.
+        spotify = {'connected': True, 'name': None, 'limit': str(e)}
     except Exception as e:
         spotify = {'connected': False, 'error': str(e)}
     return jsonify({

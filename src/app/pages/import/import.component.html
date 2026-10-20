@@ -1,5 +1,5 @@
 <h1 class="page-title">Import your playlists</h1>
-<p class="page-subtitle">Without Spotify Premium, export your playlists to a file. Music Sorter downloads their songs and keeps your MP3 playlists up to date.</p>
+<p class="page-subtitle">Export your playlists to a file, then import it.</p>
 
 <!-- Importing -->
 <div *ngIf="state?.job?.running" class="card mt-6 p-5">
@@ -26,7 +26,10 @@
     Imported {{ r.file }}: {{ r.songs }} songs in {{ r.playlists }} playlists.
     <ng-container *ngIf="r.songs_added || r.songs_removed">{{ r.songs_added }} new songs, {{ r.songs_removed }} removed.</ng-container>
     <ng-container *ngIf="r.playlists_added.length">New playlists: {{ r.playlists_added.join(', ') }}.</ng-container>
+    <ng-container *ngIf="r.first">Choose the playlists to download, then Sync in Library.</ng-container>
+    <ng-container *ngIf="!r.first && !r.synced">{{ r.to_download }} songs to download. Sync in Library.</ng-container>
   </span>
+  <a *ngIf="r.first" routerLink="/settings" fragment="downloads" class="btn-primary px-3 py-1.5">Playlists to download</a>
   <a routerLink="/library" class="btn-outline bg-white px-3 py-1.5">Library</a>
 </div>
 
@@ -36,7 +39,7 @@
     <h2 class="font-semibold">TuneMyMusic</h2>
     <span class="chip bg-brand-50 text-brand-700">Recommended</span>
   </div>
-  <p class="mt-0.5 text-sm text-zinc-500">Free. Works with Spotify, Apple Music, Deezer, YouTube Music and more. Your whole library in one file, in a few minutes.</p>
+  <p class="mt-0.5 text-sm text-zinc-500">Free. Spotify, Apple Music, Deezer, YouTube Music.</p>
 
   <div class="mt-4 flex items-start gap-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 ring-1 ring-amber-600/10">
     <span class="mt-0.5 inline-flex shrink-0"><lucide-icon name="info" [size]="16"></lucide-icon></span>
@@ -63,7 +66,7 @@
     <li class="flex gap-3">
       <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-xs font-semibold text-white">4</span>
       <div class="pt-0.5">
-        Save the file in your Downloads folder. Music Sorter imports it by itself.
+        Save the file in your Downloads folder. It is imported automatically.
         <div *ngIf="!state?.job?.running" class="mt-2 flex items-center gap-2 text-zinc-500">
           <span class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="14"></lucide-icon></span>
           Waiting for the file in {{ folder || 'Downloads' }}
@@ -76,7 +79,7 @@
 <!-- Spotify data export -->
 <section class="card mt-4 p-6">
   <h2 class="font-semibold">Spotify data export</h2>
-  <p class="mt-0.5 text-sm text-zinc-500">Free, from your Spotify account. Spotify takes up to 30 days to prepare it, usually a few days. Only the playlists you made are in it.</p>
+  <p class="mt-0.5 text-sm text-zinc-500">Free. Spotify takes up to 30 days to prepare it. Only the playlists you made are included.</p>
   <ol class="mt-5 space-y-4 text-sm">
     <li class="flex gap-3">
       <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-700">1</span>
@@ -92,7 +95,7 @@
     </li>
     <li class="flex gap-3">
       <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-700">3</span>
-      <div class="pt-0.5">When Spotify emails you, download the zip file to your Downloads folder. Music Sorter imports it by itself.</div>
+      <div class="pt-0.5">When Spotify emails you, download the zip file to your Downloads folder. It is imported automatically.</div>
     </li>
   </ol>
 </section>

@@ -6,70 +6,151 @@
       <button type="button" (click)="reveal()" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-500">{{ state?.music_dir }}</button>.
     </p>
   </div>
-  <div class="flex items-center gap-2">
-    <a *ngIf="fromFile" routerLink="/import" class="btn-outline">
-      <lucide-icon name="download" [size]="15"></lucide-icon> Import playlists
-    </a>
-    <button class="btn-outline" (click)="check()" [disabled]="state?.job?.running">
-      <lucide-icon name="refresh-cw" [size]="15"></lucide-icon> Check
-    </button>
-    <button class="btn-brand" (click)="sync()" [disabled]="state?.job?.running">
-      <lucide-icon name="download" [size]="15"></lucide-icon> Sync
-    </button>
-  </div>
+  <a *ngIf="fromFile" routerLink="/import" class="btn-outline">
+    <lucide-icon name="download" [size]="15"></lucide-icon> Import playlists
+  </a>
 </div>
-
-<!-- Progress -->
-<div *ngIf="state?.job?.running" class="card mt-6 p-5">
-  <div class="flex items-center justify-between text-sm">
-    <span class="flex items-center gap-2 font-medium">
-      <span class="inline-flex animate-spin text-zinc-400"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span>
-      {{ state?.job?.step }}
-    </span>
-    <span *ngIf="state?.job?.total" class="tabular-nums text-zinc-500">{{ state?.job?.done }} / {{ state?.job?.total }}</span>
-  </div>
-  <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-    <div class="h-full rounded-full bg-zinc-900 transition-all duration-500"
-         [style.width.%]="state?.job?.total ? 100 * (state?.job?.done || 0) / (state?.job?.total || 1) : 5"></div>
-  </div>
-  <ul *ngIf="state?.job?.current?.length" class="mt-3 space-y-0.5 text-xs text-zinc-400">
-    <li *ngFor="let name of state?.job?.current" class="truncate">{{ name }}</li>
-  </ul>
-</div>
-<div *ngIf="state?.job?.error" class="mt-6 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700 ring-1 ring-rose-600/10">{{ state?.job?.error }}</div>
 
 <!-- Next sync -->
-<div *ngIf="state?.plan as plan" class="mt-6 grid gap-3 sm:grid-cols-4">
-  <div class="card p-5">
-    <div class="label">To download</div>
-    <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ plan.to_download }}</div>
+<section *ngIf="state" class="card mt-6 p-6">
+  <ng-container *ngIf="state.job.running">
+    <div class="flex items-center justify-between text-sm">
+      <span class="flex items-center gap-2 font-medium">
+        <span class="inline-flex animate-spin text-zinc-400"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span>
+        {{ state.job.step }}
+      </span>
+      <span *ngIf="state.job.total" class="tabular-nums text-zinc-500">{{ state.job.done }} / {{ state.job.total }}</span>
+    </div>
+    <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+      <div class="h-full rounded-full bg-zinc-900 transition-all duration-500"
+           [style.width.%]="state.job.total ? 100 * (state.job.done || 0) / (state.job.total || 1) : 5"></div>
+    </div>
+    <ul *ngIf="state.job.current?.length" class="mt-3 space-y-0.5 text-xs text-zinc-400">
+      <li *ngFor="let name of state.job.current" class="truncate">{{ name }}</li>
+    </ul>
+  </ng-container>
+
+  <div *ngIf="!state.job.running" class="flex flex-wrap items-center justify-between gap-4">
+    <div *ngIf="state.plan as plan">
+      <div class="font-semibold">Next sync</div>
+      <div class="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        <span><span class="font-semibold tabular-nums">{{ plan.to_download }}</span> <span class="text-zinc-500">to download</span></span>
+        <span><span class="font-semibold tabular-nums">{{ plan.to_move }}</span> <span class="text-zinc-500">to move</span></span>
+        <span><span class="font-semibold tabular-nums">{{ plan.to_remove }}</span> <span class="text-zinc-500">removed</span></span>
+      </div>
+      <div class="mt-1 text-xs text-zinc-400">Checked {{ plan.generated_at | date:'d MMM, HH:mm' }}.</div>
+    </div>
+    <div *ngIf="!state.plan" class="text-sm text-zinc-500">
+      <div class="font-semibold text-zinc-900">Nothing downloaded yet</div>
+      Click Check to see what will be downloaded, then Sync.
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="btn-outline" (click)="check()">
+        <lucide-icon name="refresh-cw" [size]="15"></lucide-icon> Check
+      </button>
+      <button class="btn-brand" (click)="sync()" [disabled]="!state.plan">
+        <lucide-icon name="download" [size]="15"></lucide-icon> Sync
+      </button>
+    </div>
   </div>
+</section>
+<div *ngIf="state?.job?.error" class="mt-4 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700 ring-1 ring-rose-600/10">{{ state?.job?.error }}</div>
+
+<!-- Downloaded -->
+<section *ngIf="state" class="mt-4 grid gap-3 sm:grid-cols-3">
   <div class="card p-5">
-    <div class="label">To move</div>
-    <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ plan.to_move }}</div>
-  </div>
-  <div class="card p-5">
-    <div class="label">Removed</div>
-    <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ plan.to_remove }}</div>
+    <div class="label">Downloaded</div>
+    <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ state.downloaded }} <span class="text-sm font-normal text-zinc-400">songs</span></div>
   </div>
   <div class="card p-5">
     <div class="label">Playlists</div>
-    <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ plan.playlists }}</div>
+    <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ state.playlists }}</div>
   </div>
-</div>
-<p *ngIf="state?.plan as plan" class="mt-2 text-xs text-zinc-400">
-  Checked {{ plan.generated_at | date:'d MMM, HH:mm' }}.
-</p>
-<div *ngIf="state && !state.plan && !state.job.running" class="card mt-6 p-5 text-sm text-zinc-500">
-  <div class="font-medium text-zinc-900">Nothing downloaded yet</div>
-  Click Check to see what will be downloaded, then Sync.
-</div>
+  <a routerLink="/settings" fragment="layout" class="card group p-5 transition hover:shadow-lift">
+    <div class="label">File layout</div>
+    <div class="mt-1.5 flex items-center justify-between gap-2">
+      <span class="text-lg font-semibold tracking-tight">{{ layoutLabel }}</span>
+      <span class="text-sm text-zinc-400 group-hover:text-zinc-900">Change</span>
+    </div>
+  </a>
+</section>
+
+<!-- Devices -->
+<section class="mt-10">
+  <h2 class="font-semibold">On your devices</h2>
+  <div class="mt-4 grid gap-3 sm:grid-cols-2">
+    <div *ngIf="state?.platform !== 'Windows'" class="card p-5 text-sm text-zinc-600">
+      <div class="font-medium text-zinc-900">Mac and iPhone</div>
+      <p class="mt-2">Apple Music gets the songs and your playlists, in a “Music Sorter” folder.</p>
+      <ng-container *ngTemplateOutlet="autoSync"></ng-container>
+      <p class="mt-3">iPhone, set up once:</p>
+      <p class="mt-1">With an Apple Music or iTunes Match subscription, turn on Sync Library on the Mac and the iPhone. New songs arrive by themselves.</p>
+      <p class="mt-1">Without it, in Finder select the iPhone, sync the “Music Sorter” playlists and turn on “Show this iPhone when on Wi-Fi”. It syncs while the iPhone charges on the same Wi-Fi.</p>
+      <ng-container *ngTemplateOutlet="updateButton"></ng-container>
+    </div>
+    <div *ngIf="state?.platform === 'Windows'" class="card p-5 text-sm text-zinc-600">
+      <div class="font-medium text-zinc-900">Windows and iPhone</div>
+      <p class="mt-2">iTunes gets the songs and your playlists, in a “Music Sorter” folder.</p>
+      <ng-container *ngTemplateOutlet="autoSync"></ng-container>
+      <p class="mt-3">Set up once:</p>
+      <ol class="mt-1 list-decimal space-y-1 pl-4">
+        <li>Install iTunes from the Microsoft Store and open it once. Don't install Apple Music or Apple Devices, iTunes would lose the music.</li>
+        <li>Connect the iPhone, select it in iTunes, sync the “Music Sorter” playlists and turn on “Sync with this iPhone over Wi-Fi”.</li>
+      </ol>
+      <ng-container *ngTemplateOutlet="updateButton"></ng-container>
+    </div>
+    <div class="card p-5 text-sm text-zinc-600">
+      <div class="font-medium text-zinc-900">Android</div>
+      <p class="mt-2">Set up once:</p>
+      <ol class="mt-1 list-decimal space-y-1 pl-4">
+        <li>Install Syncthing on the computer (<a href="https://syncthing.net/downloads/" target="_blank" rel="noopener" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2">syncthing.net</a>) and Syncthing-Fork on the phone (from F-Droid or Google Play).</li>
+        <li>Pair them, then share the folder <span class="break-all font-medium text-zinc-700">{{ state?.music_dir }}</span>.</li>
+        <li>In Poweramp, add the folder. It reads the playlists.</li>
+      </ol>
+      <p class="mt-2">New songs arrive by themselves when the phone is on the same Wi-Fi.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Failed / removed -->
+<section *ngIf="state && (state.failed.length || state.removed.length)" class="mt-8">
+  <div class="inline-flex rounded-full bg-zinc-100 p-1 text-sm">
+    <button class="rounded-full px-4 py-1.5 font-medium transition"
+            [ngClass]="tab === 'failed' ? 'bg-white text-zinc-900 shadow-soft' : 'text-zinc-500 hover:text-zinc-900'"
+            (click)="tab = 'failed'; shown = 10">Not found <span class="text-zinc-400">{{ state.failed.length }}</span></button>
+    <button class="rounded-full px-4 py-1.5 font-medium transition"
+            [ngClass]="tab === 'removed' ? 'bg-white text-zinc-900 shadow-soft' : 'text-zinc-500 hover:text-zinc-900'"
+            (click)="tab = 'removed'; shown = 10">Removed <span class="text-zinc-400">{{ state.removed.length }}</span></button>
+  </div>
+  <p class="mt-2 text-xs text-zinc-400">
+    {{ tab === 'failed' ? 'Could not be downloaded. Retried at every sync.' : 'No longer in any synced playlist.' }}
+  </p>
+  <ul class="card mt-3 divide-y divide-zinc-100 overflow-hidden">
+    <li *ngFor="let t of list.slice(0, shown)" class="flex items-center gap-3 px-4 py-2.5">
+      <img *ngIf="t.image_url" [src]="t.image_url" alt="" loading="lazy" class="h-9 w-9 rounded-md object-cover" />
+      <div *ngIf="!t.image_url" class="h-9 w-9 rounded-md bg-zinc-100"></div>
+      <div class="min-w-0 flex-1">
+        <div class="truncate text-sm font-medium">{{ t.title }}</div>
+        <div class="truncate text-xs text-zinc-500">{{ t.artists.join(', ') }} · {{ t.album }}</div>
+      </div>
+      <span *ngIf="t.status === 'removed'" class="chip bg-rose-50 text-rose-600">Removed</span>
+      <span class="hidden text-xs text-zinc-400 sm:inline">{{ t.folder }}</span>
+    </li>
+  </ul>
+  <button *ngIf="list.length > shown" class="btn-ghost mt-2 px-3 py-1 text-xs" (click)="shown = shown + 20">
+    Show {{ list.length - shown < 20 ? list.length - shown : 20 }} more
+  </button>
+</section>
 
 <!-- Import -->
-<section *ngIf="state" class="card mt-8 p-6">
-  <h2 class="font-semibold">Import existing files</h2>
+<section *ngIf="state" class="mt-10">
+  <button type="button" (click)="showImport = !showImport" class="inline-flex items-center gap-1 font-semibold">
+    <span class="inline-flex transition" [class.rotate-90]="showImport"><lucide-icon name="chevron-right" [size]="16"></lucide-icon></span>
+    Import existing files
+  </button>
+  <div *ngIf="showImport" class="card mt-3 p-6">
   <p class="mt-0.5 text-sm text-zinc-500">
-    Songs you already downloaded are matched to the songs of your playlists and moved to their folder (Settings, File layout). They are not downloaded again.
+    Songs you already have are moved to the music folder instead of being downloaded.
   </p>
   <div class="mt-4 flex flex-wrap items-center gap-3">
     <input class="input min-w-[16rem] flex-1" [(ngModel)]="importPath" placeholder="Folder with your music files" />
@@ -103,78 +184,6 @@
       </button>
     </div>
   </div>
-</section>
-
-<!-- Folders -->
-<section *ngIf="state" class="mt-8">
-  <h2 class="font-semibold">Downloaded</h2>
-  <p class="mt-0.5 text-sm text-zinc-500">{{ state.downloaded }} songs, {{ state.playlists }} playlists.</p>
-</section>
-
-<!-- Failed / removed -->
-<section *ngIf="state && (state.failed.length || state.removed.length)" class="mt-8">
-  <div class="inline-flex rounded-full bg-zinc-100 p-1 text-sm">
-    <button class="rounded-full px-4 py-1.5 font-medium transition"
-            [ngClass]="tab === 'failed' ? 'bg-white text-zinc-900 shadow-soft' : 'text-zinc-500 hover:text-zinc-900'"
-            (click)="tab = 'failed'; shown = 10">Not found <span class="text-zinc-400">{{ state.failed.length }}</span></button>
-    <button class="rounded-full px-4 py-1.5 font-medium transition"
-            [ngClass]="tab === 'removed' ? 'bg-white text-zinc-900 shadow-soft' : 'text-zinc-500 hover:text-zinc-900'"
-            (click)="tab = 'removed'; shown = 10">Removed <span class="text-zinc-400">{{ state.removed.length }}</span></button>
-  </div>
-  <p class="mt-2 text-xs text-zinc-400">
-    {{ tab === 'failed' ? 'Could not be downloaded. Retried at every sync.' : 'No longer in any synced playlist.' }}
-  </p>
-  <ul class="card mt-3 divide-y divide-zinc-100 overflow-hidden">
-    <li *ngFor="let t of list.slice(0, shown)" class="flex items-center gap-3 px-4 py-2.5">
-      <img *ngIf="t.image_url" [src]="t.image_url" alt="" loading="lazy" class="h-9 w-9 rounded-md object-cover" />
-      <div *ngIf="!t.image_url" class="h-9 w-9 rounded-md bg-zinc-100"></div>
-      <div class="min-w-0 flex-1">
-        <div class="truncate text-sm font-medium">{{ t.title }}</div>
-        <div class="truncate text-xs text-zinc-500">{{ t.artists.join(', ') }} · {{ t.album }}</div>
-      </div>
-      <span *ngIf="t.status === 'removed'" class="chip bg-rose-50 text-rose-600">Removed</span>
-      <span class="hidden text-xs text-zinc-400 sm:inline">{{ t.folder }}</span>
-    </li>
-  </ul>
-  <button *ngIf="list.length > shown" class="btn-ghost mt-2 px-3 py-1 text-xs" (click)="shown = shown + 20">
-    Show {{ list.length - shown < 20 ? list.length - shown : 20 }} more
-  </button>
-</section>
-
-<!-- Devices -->
-<section class="mt-10">
-  <h2 class="font-semibold">On your devices</h2>
-  <div class="mt-4 grid gap-3 sm:grid-cols-2">
-    <div *ngIf="state?.platform !== 'Windows'" class="card p-5 text-sm text-zinc-600">
-      <div class="font-medium text-zinc-900">Mac and iPhone</div>
-      <p class="mt-2">Apple Music gets the songs and your playlists, in a “Music Sorter” folder.</p>
-      <ng-container *ngTemplateOutlet="autoSync"></ng-container>
-      <p class="mt-3">iPhone, set up once:</p>
-      <p class="mt-1">With an Apple Music or iTunes Match subscription, turn on Sync Library on the Mac and the iPhone. New songs arrive by themselves.</p>
-      <p class="mt-1">Without it, in Finder select the iPhone, sync the “Music Sorter” playlists and turn on “Show this iPhone when on Wi-Fi”. It syncs while the iPhone charges on the same Wi-Fi.</p>
-      <ng-container *ngTemplateOutlet="updateButton"></ng-container>
-    </div>
-    <div *ngIf="state?.platform === 'Windows'" class="card p-5 text-sm text-zinc-600">
-      <div class="font-medium text-zinc-900">Windows and iPhone</div>
-      <p class="mt-2">iTunes gets the songs and your playlists, in a “Music Sorter” folder.</p>
-      <ng-container *ngTemplateOutlet="autoSync"></ng-container>
-      <p class="mt-3">Set up once:</p>
-      <ol class="mt-1 list-decimal space-y-1 pl-4">
-        <li>Install iTunes from the Microsoft Store and open it once. Don't install the Apple Music or Apple Devices apps: they take the music away from iTunes.</li>
-        <li>Connect the iPhone, select it in iTunes, sync the “Music Sorter” playlists and turn on “Sync with this iPhone over Wi-Fi”.</li>
-      </ol>
-      <ng-container *ngTemplateOutlet="updateButton"></ng-container>
-    </div>
-    <div class="card p-5 text-sm text-zinc-600">
-      <div class="font-medium text-zinc-900">Android</div>
-      <p class="mt-2">Set up once:</p>
-      <ol class="mt-1 list-decimal space-y-1 pl-4">
-        <li>Install Syncthing on the computer (<a href="https://syncthing.net/downloads/" target="_blank" rel="noopener" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2">syncthing.net</a>) and Syncthing-Fork on the phone (from F-Droid or Google Play).</li>
-        <li>Pair them, then share the folder <span class="break-all font-medium text-zinc-700">{{ state?.music_dir }}</span>.</li>
-        <li>In Poweramp, add the folder. It reads the playlists.</li>
-      </ol>
-      <p class="mt-2">New songs arrive by themselves when the phone is on the same Wi-Fi.</p>
-    </div>
   </div>
 </section>
 

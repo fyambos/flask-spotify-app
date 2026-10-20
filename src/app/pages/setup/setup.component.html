@@ -63,7 +63,7 @@
           </span>
           <div class="min-w-0 flex-1 text-sm text-zinc-500">
             <div class="font-medium text-zinc-900">Import from any streaming service</div>
-            <div>No Premium needed. Export your playlists with TuneMyMusic, from Spotify, Apple Music, Deezer, YouTube Music and more.</div>
+            <div>No Premium needed. Uses TuneMyMusic.</div>
             <div *ngIf="status?.playlists && status?.import?.source !== 'spotify'" class="mt-1 text-brand-700">Imported {{ status?.import?.file }}</div>
           </div>
         </a>
@@ -75,7 +75,7 @@
           </span>
           <div class="min-w-0 flex-1 text-sm text-zinc-500">
             <div class="font-medium text-zinc-900">Connect Spotify</div>
-            <div *ngIf="!status?.spotify?.connected">Needs Spotify Premium. Your playlists sync by themselves, sorting is saved on Spotify, and you see your stats.</div>
+            <div *ngIf="!status?.spotify?.connected">Spotify Premium required.</div>
             <div *ngIf="status?.spotify?.connected">Connected as {{ status?.spotify?.name }}</div>
 
             <!-- No keys in .env -->

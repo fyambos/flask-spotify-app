@@ -1,28 +1,51 @@
-<div class="flex flex-wrap items-end justify-between gap-4">
-  <div>
-    <h1 class="page-title">Sort Playlists</h1>
-    <p class="page-subtitle">Organize the songs of a playlist into playlists of your choice. Changes won't affect Spotify until you save them.</p>
-  </div>
-  <div class="flex items-center gap-2">
-    <a routerLink="/sort/rules" class="btn-outline">
-      <lucide-icon name="list-music" [size]="16"></lucide-icon> Playlists &amp; rules
-    </a>
-  </div>
-</div>
+<h1 class="page-title">Sort Playlists</h1>
+<p class="page-subtitle">Organize your songs into playlists. Changes won't affect Spotify until you save them.</p>
 
-<!-- Sort from -->
-<div *ngIf="playlists.length" class="mt-6 flex flex-wrap items-center gap-2 text-sm">
-  <span class="font-medium text-zinc-500">Sort from</span>
-  <span *ngFor="let id of sources" class="chip gap-1 bg-zinc-900 py-1 pl-3 pr-1.5 text-white">
-    {{ sourceName(id) }}
-    <button *ngIf="sources.length > 1" (click)="removeSource(id)" class="inline-flex rounded-full p-0.5 hover:bg-white/20" aria-label="Remove">
-      <lucide-icon name="x" [size]="12"></lucide-icon>
-    </button>
-  </span>
-  <select class="input w-auto rounded-full py-1 pr-8 text-sm" [(ngModel)]="addingSource" (ngModelChange)="addSource($event)">
-    <option value="" disabled>Add a playlist</option>
-    <option *ngFor="let p of sourceChoices" [value]="p.id">{{ p.name }}</option>
-  </select>
+<!-- What is sorted, and where to -->
+<div *ngIf="config_loaded" class="card mt-6 grid gap-5 p-5 sm:grid-cols-[1fr_auto_1fr]">
+  <div class="min-w-0">
+    <div class="text-sm font-semibold">Sort from</div>
+    <div class="mt-3 flex flex-wrap gap-1.5">
+      <span *ngFor="let id of sources" class="chip gap-1 bg-zinc-900 py-1 pl-3 pr-1.5 text-white">
+        {{ sourceName(id) }}
+        <button *ngIf="sources.length > 1" (click)="removeSource(id)" class="inline-flex rounded-full p-0.5 hover:bg-white/20" aria-label="Remove">
+          <lucide-icon name="x" [size]="12"></lucide-icon>
+        </button>
+      </span>
+    </div>
+    <select class="input mt-3 rounded-full py-1.5 text-sm" [(ngModel)]="addingSource" (ngModelChange)="addSource($event)">
+      <option value="" disabled>+ Add a playlist to sort</option>
+      <option *ngFor="let p of sourceChoices" [value]="p.id">{{ p.name }}</option>
+    </select>
+  </div>
+
+  <span class="hidden items-center text-zinc-300 sm:flex"><lucide-icon name="arrow-right" [size]="22"></lucide-icon></span>
+
+  <div class="min-w-0">
+    <div class="flex items-center justify-between gap-3">
+      <span class="text-sm font-semibold">Sort into</span>
+      <a *ngIf="playlists.length" routerLink="/sort/rules" class="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 hover:text-zinc-900">
+        <lucide-icon name="list-music" [size]="15"></lucide-icon> Playlists &amp; rules
+      </a>
+    </div>
+    <div class="mt-3 flex flex-wrap gap-1.5">
+      <span *ngFor="let p of playlists" class="chip py-1">{{ p.name }}</span>
+      <span *ngIf="!playlists.length" class="text-sm text-zinc-400">None yet.</span>
+    </div>
+    <div *ngIf="!creatingInto" class="mt-3 flex flex-wrap items-center gap-2">
+      <select class="input min-w-0 flex-1 rounded-full py-1.5 text-sm" [(ngModel)]="addingInto" (ngModelChange)="addInto($event)">
+        <option value="" disabled>+ Add a playlist to sort into</option>
+        <option value="__new">New playlist</option>
+        <option *ngFor="let p of intoChoices" [value]="p.id">{{ p.name }}</option>
+      </select>
+      <a *ngIf="!playlists.length" routerLink="/setup" [queryParams]="{ step: 'choose' }" class="btn-primary px-3 py-1.5 text-sm">Choose playlists</a>
+    </div>
+    <form *ngIf="creatingInto" class="mt-3 flex flex-wrap items-center gap-2" (ngSubmit)="createInto()">
+      <input class="input min-w-0 flex-1 py-1.5" name="newInto" [(ngModel)]="newIntoName" placeholder="Playlist name" autofocus />
+      <button class="btn-primary px-3 py-1.5" type="submit" [disabled]="!newIntoName.trim()">Create</button>
+      <button class="btn-ghost px-3 py-1.5" type="button" (click)="creatingInto = false">Cancel</button>
+    </form>
+  </div>
 </div>
 
 <!-- Sorted songs not on Spotify yet -->
@@ -60,18 +83,6 @@
       {{ sync.running ? 'Syncing…' : 'Sync' }}
     </button>
   </ng-container>
-</div>
-
-<!-- No playlists to sort into yet -->
-<div *ngIf="config_loaded && !playlists.length" class="card mt-8 flex flex-col items-center px-6 py-14 text-center">
-  <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
-    <lucide-icon name="list-music" [size]="26"></lucide-icon>
-  </span>
-  <h2 class="mt-5 text-lg font-semibold tracking-tight">Choose the playlists to sort into</h2>
-  <p class="mt-1 max-w-sm text-sm text-zinc-500">Music Sorter learns how you already sorted them.</p>
-  <a routerLink="/setup" [queryParams]="{ step: 'choose' }" class="btn-primary mt-6 px-5 py-2.5">
-    Choose playlists <lucide-icon name="arrow-right" [size]="16"></lucide-icon>
-  </a>
 </div>
 
 <div *ngIf="state?.preview && playlists.length" class="mt-6 flex flex-wrap items-center justify-end gap-2">

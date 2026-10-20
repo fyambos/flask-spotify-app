@@ -84,7 +84,8 @@ export interface ImportStatus {
 export interface ImportState {
   job: JobState;
   status: ImportStatus;
-  result: { kind: string; file: string; songs: number; playlists: number; songs_added: number; songs_removed: number; playlists_added: string[] } | null;
+  result: { kind: string; file: string; songs: number; playlists: number; songs_added: number; songs_removed: number;
+            playlists_added: string[]; first?: boolean; synced?: boolean; to_download?: number } | null;
   watch: { last: string | null; error: string | null };
 }
 

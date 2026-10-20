@@ -86,6 +86,41 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
     if (this.sources.length > 1) this.setSources(this.sources.filter(s => s !== id));
   }
 
+  addingInto = '';
+  creatingInto = false;
+  newIntoName = '';
+
+  /** Your playlists that can receive songs (not Liked Songs, not playlists of other users). */
+  get intoChoices(): SpotifyPlaylist[] {
+    const taken = new Set(this.playlists.map(p => p.playlist_id || 'app:' + p.id));
+    return this.allPlaylists.filter(p => p.id !== 'liked' && !p.app_only && !taken.has(p.id));
+  }
+
+  addInto(id: string): void {
+    if (id === '__new') {
+      this.creatingInto = true;
+      this.newIntoName = '';
+      this.addingInto = '';
+      return;
+    }
+    const playlist = this.allPlaylists.find(p => p.id === id);
+    if (!playlist) return;
+    this.playlistService.addGenrePlaylist({ name: playlist.name, playlist_id: playlist.id, genre_names: [] }).subscribe(entry => {
+      this.playlists = [...this.playlists, entry];
+      this.addingInto = '';
+    });
+  }
+
+  /** A playlist that only exists in the app until the next Sync with Spotify. */
+  createInto(): void {
+    const name = this.newIntoName.trim();
+    if (!name) return;
+    this.playlistService.addGenrePlaylist({ name, playlist_id: null, genre_names: [] }).subscribe(entry => {
+      this.playlists = [...this.playlists, entry];
+      this.creatingInto = false;
+    });
+  }
+
   get onlyLiked(): boolean {
     return this.sources.length === 1 && this.sources[0] === 'liked';
   }
@@ -222,7 +257,7 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
         confirmLabel: 'Add to Spotify',
       } : {
         title: `Save ${planned} songs?`,
-        message: `Songs are saved in the app, for your downloads. They are added to Spotify at the next Sync with Spotify. This will not modify ${from}.`,
+        message: `Songs are added to Spotify at the next Sync with Spotify. This will not modify ${from}.`,
         confirmLabel: 'Save',
       },
     }).afterClosed().subscribe((confirmed) => {

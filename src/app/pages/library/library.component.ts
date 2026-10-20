@@ -18,6 +18,8 @@ export class LibraryComponent implements OnInit, OnDestroy {
   showUnmatched = false;
   appleMusicAuto = true;
   fromFile = false;
+  showImport = false;
+  layoutLabel = '';
   private poll: any = null;
 
   constructor(private playlistService: PlaylistService, private dialog: MatDialog, private statusService: StatusService) { }
@@ -28,7 +30,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.fromFile = status?.import.source === 'tunemymusic' || status?.import.source === 'spotify-export';
     });
     this.statusService.refresh();
-    this.playlistService.getConfig().subscribe(config => this.appleMusicAuto = config.apple_music_auto);
+    this.playlistService.getConfig().subscribe(config => {
+      this.appleMusicAuto = config.apple_music_auto;
+      const labels = { artist_album: 'Artist / Album', artist: 'Artist', one_folder: 'One folder', first_playlist: 'First playlist' };
+      this.layoutLabel = labels[config.layout.preset];
+    });
   }
 
   toggleAppleMusicAuto(): void {

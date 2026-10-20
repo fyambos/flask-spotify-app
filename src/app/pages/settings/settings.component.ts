@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { AppConfig, LayoutExample, LayoutPreset, PlaylistService, SpotifyPlaylist } from 'src/app/services/playlist.service';
 import { StatusService } from 'src/app/services/status.service';
@@ -33,12 +34,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
   ];
   private statusSub: any;
 
-  constructor(private playlistService: PlaylistService, private statusService: StatusService) { }
+  constructor(private playlistService: PlaylistService, private statusService: StatusService, private route: ActivatedRoute) { }
 
   ngOnInit(): void {
     this.playlistService.getConfig().subscribe(config => {
       this.config = config;
       this.computeLists();
+      // Links like /settings#downloads open the page at that section.
+      const fragment = this.route.snapshot.fragment;
+      if (fragment) setTimeout(() => document.getElementById(fragment)?.scrollIntoView({ block: 'start' }));
     });
     this.playlistService.getPlaylists().subscribe(playlists => {
       this.playlists = playlists;

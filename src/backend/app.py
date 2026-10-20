@@ -51,13 +51,24 @@ apple_job = sorter.Job(apple_music.update if apple_music.available() else itunes
 spotify_sync_job = sorter.Job(lambda sp, progress: sort_state.push(sp, catalog_store.refresh_from_spotify(sp, progress), progress))
 
 
+AUTO_SYNC_MAX = 200  # songs; above it, or on the first import, the Sync waits for the user
+
+
 def _import_and_sync(sp, progress, path):
-    """Import an exported playlists file, check the library, and sync it when nothing has to be moved or removed."""
+    """Import an exported playlists file and check the library.
+
+    The Sync runs by itself only for an update of a library already synced, with nothing to
+    move or remove and a few songs to download. On a first import, the user chooses the
+    playlists to download first.
+    """
     progress(step='Reading the file')
     result = catalog_store.import_file(path)
-    library.IMPORTED_PATH.write_text(json.dumps(result), encoding='utf-8')
     plan = library.sync(sp, progress, apply=False)
-    if not plan['to_move'] and not plan['to_remove']:
+    first = not library.load_library()['tracks']
+    auto = not first and not plan['to_move'] and not plan['to_remove'] and len(plan['to_download']) <= AUTO_SYNC_MAX
+    result.update(first=first, synced=auto, to_download=len(plan['to_download']))
+    library.IMPORTED_PATH.write_text(json.dumps(result), encoding='utf-8')
+    if auto:
         library.sync(sp, progress, apply=True)
 
 

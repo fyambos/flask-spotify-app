@@ -26,6 +26,7 @@ export class PlaylistFoldersComponent implements OnInit, OnChanges {
   creating = false;
   newName = '';
   search = '';
+  open = new Set<string>();
 
   constructor(private playlistService: PlaylistService) { }
 
@@ -70,6 +71,15 @@ export class PlaylistFoldersComponent implements OnInit, OnChanges {
     const rest = [...groups.keys()].filter(n => !known.has(n)).sort((a, b) => a.localeCompare(b));
     this.folders = [...order.filter((n, i) => order.indexOf(n) === i && n !== this.defaultFolder), ...rest, this.defaultFolder]
       .map(n => groups.get(n)!);
+  }
+
+  /** Everything is collapsed by default; a search opens the folders that match. */
+  isOpen(folder: Folder): boolean {
+    return this.search.trim() ? true : this.open.has(folder.name);
+  }
+
+  toggle(folder: Folder): void {
+    this.open.has(folder.name) ? this.open.delete(folder.name) : this.open.add(folder.name);
   }
 
   visible(folder: Folder) {

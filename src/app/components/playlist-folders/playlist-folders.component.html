@@ -1,55 +1,61 @@
-<div class="flex flex-wrap items-end justify-between gap-3">
+<div class="flex flex-wrap items-center justify-between gap-3 px-6 py-5">
   <div>
     <h2 class="font-semibold">Folders</h2>
-    <p class="mt-0.5 text-sm text-zinc-500">How your playlists are grouped in Apple Music and in the Playlists folder. Drag a playlist to move it.</p>
+    <p class="mt-0.5 text-sm text-zinc-500">How your playlists are grouped in Apple Music and in the Playlists folder. Drag a playlist onto a folder to move it.</p>
   </div>
   <div class="flex items-center gap-2">
     <div class="relative">
       <span class="pointer-events-none absolute left-3 top-1/2 inline-flex -translate-y-1/2 text-zinc-400"><lucide-icon name="search" [size]="14"></lucide-icon></span>
-      <input class="input w-52 rounded-full py-1.5 pl-8" [(ngModel)]="search" placeholder="Find a playlist" />
+      <input class="input w-44 rounded-full py-1.5 pl-8" [(ngModel)]="search" placeholder="Find a playlist" />
     </div>
-    <button class="btn-outline" (click)="creating = true">
+    <button class="btn-ghost" (click)="creating = true">
       <lucide-icon name="plus" [size]="15"></lucide-icon> New folder
     </button>
   </div>
 </div>
 
-<div class="mt-4 grid gap-3 sm:grid-cols-2" cdkDropListGroup>
-  <div *ngIf="creating" class="card p-4">
-    <input class="input" [(ngModel)]="newName" placeholder="Folder name" (keydown.enter)="create()" (keydown.escape)="creating = false" (blur)="create()" autofocus />
+<div cdkDropListGroup class="divide-y divide-zinc-100 border-t border-zinc-100">
+  <div *ngIf="creating" class="px-6 py-2.5">
+    <input class="input py-1.5" [(ngModel)]="newName" placeholder="Folder name"
+           (keydown.enter)="create()" (keydown.escape)="creating = false" (blur)="create()" />
   </div>
 
-  <div *ngFor="let folder of folders; trackBy: trackByName" class="card flex flex-col p-4"
-       [class.hidden]="search && !visible(folder).length">
-    <div class="group flex items-center gap-2">
+  <div *ngFor="let folder of folders; trackBy: trackByName"
+       cdkDropList [id]="'folder-' + folder.name" [cdkDropListData]="folder" (cdkDropListDropped)="drop($event)"
+       [class.hidden]="search && !visible(folder).length"
+       class="transition-colors [&.cdk-drop-list-receiving]:bg-zinc-50 [&.cdk-drop-list-dragging]:bg-zinc-50">
+    <!-- Folder row -->
+    <div class="group flex items-center gap-2 px-6 py-2.5">
       <ng-container *ngIf="renaming !== folder.name">
-        <span class="font-medium">{{ folder.name }}</span>
-        <span class="chip">{{ folder.playlists.length }}</span>
-        <span *ngIf="folder.name === defaultFolder" class="text-xs text-zinc-400">default</span>
-        <div class="ml-auto flex items-center opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-          <button class="icon-btn" (click)="startRename(folder)" title="Rename"><lucide-icon name="pencil" [size]="14"></lucide-icon></button>
-          <button *ngIf="folder.name !== defaultFolder" class="icon-btn hover:text-rose-600" (click)="remove(folder)"
-                  [title]="'Delete. Its playlists go to ' + defaultFolder"><lucide-icon name="trash-2" [size]="14"></lucide-icon></button>
+        <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" (click)="toggle(folder)">
+          <span class="inline-flex text-zinc-400 transition" [class.rotate-90]="isOpen(folder)">
+            <lucide-icon name="chevron-right" [size]="16"></lucide-icon>
+          </span>
+          <span class="truncate text-sm font-medium">{{ folder.name }}</span>
+          <span class="text-xs tabular-nums text-zinc-400">{{ folder.playlists.length }}</span>
+          <span *ngIf="folder.name === defaultFolder" class="text-xs text-zinc-400">· default</span>
+        </button>
+        <div class="flex items-center opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+          <button class="icon-btn h-7 w-7" (click)="startRename(folder)" title="Rename"><lucide-icon name="pencil" [size]="13"></lucide-icon></button>
+          <button *ngIf="folder.name !== defaultFolder" class="icon-btn h-7 w-7 hover:text-rose-600" (click)="remove(folder)"
+                  [title]="'Delete. Its playlists go to ' + defaultFolder"><lucide-icon name="trash-2" [size]="13"></lucide-icon></button>
         </div>
       </ng-container>
       <input *ngIf="renaming === folder.name" class="input py-1.5" [(ngModel)]="renameDraft"
              (keydown.enter)="rename(folder)" (keydown.escape)="renaming = null" (blur)="rename(folder)" />
     </div>
 
-    <div cdkDropList [id]="'folder-' + folder.name" [cdkDropListData]="folder" (cdkDropListDropped)="drop($event)"
-         class="mt-3 min-h-[2.75rem] flex-1 space-y-1 rounded-xl">
+    <!-- Playlists, only when open -->
+    <ng-container *ngIf="isOpen(folder)">
       <div *ngFor="let p of visible(folder); trackBy: trackById" cdkDrag [cdkDragData]="p"
-           class="flex cursor-grab items-center gap-2 rounded-lg bg-zinc-50 px-2.5 py-1.5 text-sm active:cursor-grabbing">
-        <span class="inline-flex text-zinc-300"><lucide-icon name="grip-vertical" [size]="14"></lucide-icon></span>
+           class="flex cursor-grab items-center gap-2 bg-white py-1.5 pl-12 pr-6 text-sm text-zinc-600 hover:bg-zinc-50 active:cursor-grabbing">
+        <span class="inline-flex text-zinc-300"><lucide-icon name="grip-vertical" [size]="13"></lucide-icon></span>
         <span class="truncate">{{ p.name }}</span>
       </div>
-      <p *ngIf="!folder.playlists.length" class="rounded-lg border border-dashed border-zinc-200 px-3 py-2.5 text-center text-xs text-zinc-400">
-        Drop playlists here
-      </p>
-    </div>
-
-    <button *ngIf="hidden(folder) > 0" class="btn-ghost mt-2 self-start px-2 py-0.5 text-xs" (click)="showMore(folder)">
-      Show {{ hidden(folder) < 10 ? hidden(folder) : 10 }} more
-    </button>
+      <p *ngIf="!folder.playlists.length" class="py-2 pl-12 pr-6 text-xs text-zinc-400">Empty. Drag playlists here.</p>
+      <button *ngIf="hidden(folder) > 0" class="btn-ghost mb-2 ml-10 px-2 py-0.5 text-xs" (click)="showMore(folder)">
+        Show {{ hidden(folder) < 10 ? hidden(folder) : 10 }} more
+      </button>
+    </ng-container>
   </div>
 </div>

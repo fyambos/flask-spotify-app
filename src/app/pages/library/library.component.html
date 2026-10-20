@@ -2,7 +2,7 @@
   <div>
     <h1 class="page-title">Library</h1>
     <p class="page-subtitle">
-      Local copy of your playlists in
+      Find downloads here:
       <button type="button" (click)="reveal()" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-500">{{ state?.music_dir }}</button>.
     </p>
   </div>
@@ -142,11 +142,6 @@
   <button *ngIf="list.length > shown" class="btn-ghost mt-2 px-3 py-1 text-xs" (click)="shown = shown + 20">
     Show {{ list.length - shown < 20 ? list.length - shown : 20 }} more
   </button>
-</section>
-
-<!-- Folders -->
-<section *ngIf="state && (state.playlist_names | keyvalue).length" class="mt-10">
-  <app-playlist-folders [names]="state.playlist_names"></app-playlist-folders>
 </section>
 
 <!-- Devices -->

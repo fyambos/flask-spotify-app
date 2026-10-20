@@ -103,6 +103,10 @@
     </div>
   </section>
 
+  <section *ngIf="(playlistNames | keyvalue).length" class="card overflow-hidden">
+    <app-playlist-folders [names]="playlistNames"></app-playlist-folders>
+  </section>
+
   <section class="card divide-y divide-zinc-100">
     <div class="px-6 py-5">
       <h2 class="font-semibold">Remembered artists</h2>

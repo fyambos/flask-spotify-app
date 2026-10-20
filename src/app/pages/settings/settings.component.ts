@@ -15,6 +15,7 @@ export class SettingsComponent implements OnInit {
   sorting = false;
   sortMessage = '';
   rememberedArtists: { id: string; name: string; playlist: string }[] = [];
+  playlistNames: { [id: string]: string } = {};
 
   constructor(private playlistService: PlaylistService, private dialog: MatDialog) { }
 
@@ -24,6 +25,7 @@ export class SettingsComponent implements OnInit {
       this.computeLists();
     });
     this.playlistService.getPlaylists().subscribe(playlists => this.playlists = playlists.filter(p => p.owned));
+    this.playlistService.getLibrary().subscribe(state => this.playlistNames = state.playlist_names);
 
   }
 

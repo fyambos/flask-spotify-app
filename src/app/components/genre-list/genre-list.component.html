@@ -52,7 +52,7 @@
       </button>
 
       <!-- Misplaced songs and rule suggestions -->
-      <div *ngIf="open.has(p.id) && stats?.[p.id] as s" class="mt-3 space-y-4 rounded-xl bg-zinc-50 p-3 sm:p-4">
+      <div *ngIf="open.has(p.id) && stats?.[p.id]?.misplaced?.length && stats?.[p.id] as s" class="mt-3 space-y-4 rounded-xl bg-zinc-50 p-3 sm:p-4">
         <div *ngIf="s.suggestions?.length">
           <div class="label mb-2">Suggested rules</div>
           <div class="flex flex-wrap gap-1.5">

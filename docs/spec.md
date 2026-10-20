@@ -180,12 +180,12 @@ Un seul comportement, avec ou sans Premium :
 ## 11. Sur tes appareils
 
 - **Mac → iPhone** (fait) : l'app met à jour Apple Music après chaque Sync, avec les dossiers de playlists (dossier par défaut « Music Sorter »). Texte : « With an Apple Music or iTunes Match subscription, turn on Sync Library on the Mac and the iPhone. New songs arrive by themselves. »
-- **Windows → iPhone** : pas d'API de script pour Apple Music sur Windows.
-  - les chansons arrivent toutes seules par le dossier « Automatically Add to Music » d'Apple Music ;
-  - les playlists s'importent à la main, l'app guide l'import ;
-  - l'iPhone se synchronise avec l'app Apple Devices.
+- **Windows → iPhone** (choisi le 2026-10-20) : par **iTunes pour Windows**, piloté par COM (pywin32), comme Apple Music sur Mac. L'app Apple Music pour Windows ne peut ni importer de playlists ni être pilotée par script (testé par la session Windows).
+  - après chaque Sync : chansons ajoutées à iTunes (sans copie), emplacement mis à jour après un déplacement, playlists vidées et remplies dans l'ordre, rangées dans leur dossier, chansons retirées enlevées d'iTunes ;
+  - installer iTunes depuis le Microsoft Store et l'ouvrir une fois (licence à accepter). Ne pas installer Apple Music ni Apple Devices : ils retirent la musique à iTunes ;
+  - l'iPhone se synchronise par iTunes (USB ou « Sync with this iPhone over Wi-Fi »).
 - **Windows ou Mac → Android** : Syncthing synchronise le dossier musique en Wi-Fi, en arrière-plan, après un appairage à faire une fois. Poweramp lit les `.m3u8`. L'app guide l'installation.
-- Windows se teste sur ton PC, dans une session Claude Code ouverte là-bas, une fois tout fini et poussé sur `main`.
+- Windows se teste sur ton PC, dans la session Claude Code ouverte là-bas.
 
 ## 12. Ce qui reste comme aujourd'hui
 

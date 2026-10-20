@@ -188,7 +188,9 @@ export interface ImportResult {
 export interface LibraryState {
   job: JobState;
   import: ImportResult | null;
-  apple_music: { available: boolean; job: JobState };
+  /** Apple Music on macOS, iTunes on Windows. */
+  apple_music: { available: boolean; app: 'Apple Music' | 'iTunes' | null; job: JobState };
+  platform: string;
   music_dir: string;
   downloaded: number;
   failed: LibraryTrack[];

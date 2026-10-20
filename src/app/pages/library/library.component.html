@@ -144,28 +144,26 @@
 <!-- Devices -->
 <section class="mt-10">
   <h2 class="font-semibold">On your devices</h2>
-  <div class="mt-4 grid gap-3 sm:grid-cols-3">
-    <div class="card p-5 text-sm text-zinc-600">
+  <div class="mt-4 grid gap-3 sm:grid-cols-2">
+    <div *ngIf="state?.platform !== 'Windows'" class="card p-5 text-sm text-zinc-600">
       <div class="font-medium text-zinc-900">Mac and iPhone</div>
       <p class="mt-2">Apple Music gets the songs and your playlists, in a “Music Sorter” folder.</p>
-      <label *ngIf="state?.apple_music?.available" class="mt-3 flex cursor-pointer items-center justify-between gap-3">
-        <span class="font-medium text-zinc-900">After each sync</span>
-        <button type="button" role="switch" [attr.aria-checked]="appleMusicAuto" (click)="toggleAppleMusicAuto()"
-                class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition"
-                [ngClass]="appleMusicAuto ? 'bg-brand-500' : 'bg-zinc-200'">
-          <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-soft transition-all"
-                [ngClass]="appleMusicAuto ? 'left-[1.375rem]' : 'left-0.5'"></span>
-        </button>
-      </label>
+      <ng-container *ngTemplateOutlet="autoSync"></ng-container>
       <p class="mt-3">iPhone, set up once:</p>
       <p class="mt-1">With an Apple Music or iTunes Match subscription, turn on Sync Library on the Mac and the iPhone. New songs arrive by themselves.</p>
       <p class="mt-1">Without it, in Finder select the iPhone, sync the “Music Sorter” playlists and turn on “Show this iPhone when on Wi-Fi”. It syncs while the iPhone charges on the same Wi-Fi.</p>
-      <button *ngIf="state?.apple_music?.available" class="btn-outline mt-4" (click)="updateAppleMusic()"
-              [disabled]="state?.job?.running || state?.apple_music?.job?.running">
-        <span *ngIf="state?.apple_music?.job?.running" class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="15"></lucide-icon></span>
-        {{ state?.apple_music?.job?.running ? state?.apple_music?.job?.step : 'Update Apple Music' }}
-      </button>
-      <p *ngIf="state?.apple_music?.job?.error" class="mt-2 text-xs text-rose-600">{{ state?.apple_music?.job?.error }}</p>
+      <ng-container *ngTemplateOutlet="updateButton"></ng-container>
+    </div>
+    <div *ngIf="state?.platform === 'Windows'" class="card p-5 text-sm text-zinc-600">
+      <div class="font-medium text-zinc-900">Windows and iPhone</div>
+      <p class="mt-2">iTunes gets the songs and your playlists, in a “Music Sorter” folder.</p>
+      <ng-container *ngTemplateOutlet="autoSync"></ng-container>
+      <p class="mt-3">Set up once:</p>
+      <ol class="mt-1 list-decimal space-y-1 pl-4">
+        <li>Install iTunes from the Microsoft Store and open it once. Don't install the Apple Music or Apple Devices apps: they take the music away from iTunes.</li>
+        <li>Connect the iPhone, select it in iTunes, sync the “Music Sorter” playlists and turn on “Sync with this iPhone over Wi-Fi”.</li>
+      </ol>
+      <ng-container *ngTemplateOutlet="updateButton"></ng-container>
     </div>
     <div class="card p-5 text-sm text-zinc-600">
       <div class="font-medium text-zinc-900">Android</div>
@@ -177,9 +175,26 @@
       </ol>
       <p class="mt-2">New songs arrive by themselves when the phone is on the same Wi-Fi.</p>
     </div>
-    <div class="card p-5 text-sm text-zinc-600">
-      <div class="font-medium text-zinc-900">Windows</div>
-      <p class="mt-2">Open the music folder in MusicBee, foobar2000 or VLC. The playlists are in the Playlists folder.</p>
-    </div>
   </div>
 </section>
+
+<ng-template #autoSync>
+  <label *ngIf="state?.apple_music?.available" class="mt-3 flex cursor-pointer items-center justify-between gap-3">
+    <span class="font-medium text-zinc-900">After each sync</span>
+    <button type="button" role="switch" [attr.aria-checked]="appleMusicAuto" (click)="toggleAppleMusicAuto()"
+            class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition"
+            [ngClass]="appleMusicAuto ? 'bg-brand-500' : 'bg-zinc-200'">
+      <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-soft transition-all"
+            [ngClass]="appleMusicAuto ? 'left-[1.375rem]' : 'left-0.5'"></span>
+    </button>
+  </label>
+</ng-template>
+
+<ng-template #updateButton>
+  <button *ngIf="state?.apple_music?.available" class="btn-outline mt-4" (click)="updateAppleMusic()"
+          [disabled]="state?.job?.running || state?.apple_music?.job?.running">
+    <span *ngIf="state?.apple_music?.job?.running" class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="15"></lucide-icon></span>
+    {{ state?.apple_music?.job?.running ? state?.apple_music?.job?.step : 'Update ' + state?.apple_music?.app }}
+  </button>
+  <p *ngIf="state?.apple_music?.job?.error" class="mt-2 text-xs text-rose-600">{{ state?.apple_music?.job?.error }}</p>
+</ng-template>

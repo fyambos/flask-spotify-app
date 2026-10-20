@@ -331,8 +331,13 @@ def sync(sp, progress=None, apply=True, catalog=None):
     save_library(library)
 
     import apple_music
-    if config.get('apple_music_auto') and apple_music.available():
-        apple_music.update(sp, progress)
+    import itunes_windows
+    if config.get('apple_music_auto'):
+        # Apple Music on macOS, iTunes on Windows.
+        if apple_music.available():
+            apple_music.update(sp, progress)
+        elif itunes_windows.available():
+            itunes_windows.update(sp, progress)
     progress(step='Done')
     return plan
 

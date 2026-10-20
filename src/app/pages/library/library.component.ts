@@ -83,10 +83,11 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   updateAppleMusic(): void {
+    const app = this.state?.apple_music?.app || 'Apple Music';
     this.dialog.open(ConfirmDialogComponent, {
       data: {
-        title: 'Update Apple Music?',
-        message: 'Adds the downloaded songs to Apple Music, removes the ones no longer in the library and writes your playlists in a "Music Sorter" folder.',
+        title: `Update ${app}?`,
+        message: `Adds the downloaded songs to ${app}, removes the ones no longer in the library and writes your playlists in a "Music Sorter" folder.`,
         confirmLabel: 'Update',
       },
     }).afterClosed().subscribe(confirmed => {

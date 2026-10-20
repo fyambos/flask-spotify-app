@@ -5,3 +5,5 @@ requests>=2.31
 spotipy>=2.24
 spotdl>=4.5.2
 mutagen>=1.47
+pywin32>=306; platform_system == "Windows"
+ytmusicapi

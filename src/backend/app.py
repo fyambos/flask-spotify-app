@@ -45,7 +45,9 @@ accuracy_job = sorter.Job(setup_analysis.check_accuracy)
 reevaluate_job = sorter.Job(setup_analysis.reevaluate)
 library_job = sorter.Job(library.sync)
 import_job = sorter.Job(library.import_files)
-apple_job = sorter.Job(apple_music.update)
+import itunes_windows
+# Apple Music on macOS, iTunes on Windows.
+apple_job = sorter.Job(apple_music.update if apple_music.available() else itunes_windows.update)
 spotify_sync_job = sorter.Job(lambda sp, progress: sort_state.push(sp, catalog_store.refresh_from_spotify(sp, progress), progress))
 
 
@@ -341,8 +343,10 @@ def get_accuracy():
 @app.route('/library', methods=['GET'])
 def get_library():
     job = next((j.state for j in (file_import_job, import_job) if j.state.get('running')), library_job.state)
+    app_name = 'Apple Music' if apple_music.available() else 'iTunes' if itunes_windows.available() else None
     return jsonify({'job': job, 'import': library.load_import_result(), 'apple_music': {
-        'available': apple_music.available(), 'job': apple_job.state}, **library.summary()})
+        'available': app_name is not None, 'app': app_name, 'job': apple_job.state},
+        'platform': platform.system(), **library.summary()})
 
 
 @app.route('/library/apple-music', methods=['POST'])

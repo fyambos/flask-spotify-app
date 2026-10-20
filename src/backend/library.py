@@ -367,7 +367,8 @@ def _remove_empty(folders, stop):
             folder = folder.parent
 
 
-DOWNLOAD_WORKERS = 4
+DOWNLOAD_WORKERS = 3
+DOWNLOAD_ATTEMPTS = 3  # YouTube Music sometimes drops the connection when several songs download at once
 
 
 def _download_all(sp, root, config, plan, library, progress):
@@ -404,6 +405,11 @@ def _download_all(sp, root, config, plan, library, progress):
     local = threading.local()
     lock = threading.Lock()
     state = {'done': 0, 'current': []}
+    failed_folders = set()
+    # spotdl creates its temp folders on first use: create them once, before the workers race for them.
+    from spotdl.utils.config import get_spotdl_path
+    for name in ('temp', 'errors'):
+        (Path(get_spotdl_path()) / name).mkdir(parents=True, exist_ok=True)
 
     # Genres are looked up before starting (the resolver and its cache are not thread-safe).
     songs = {}
@@ -443,10 +449,21 @@ def _download_all(sp, root, config, plan, library, progress):
             rel = str((folder_dir / create_file_name(song, FILE_TEMPLATE, ext)).relative_to(root))
             template = FILE_TEMPLATE_WITH_ALBUM if owners.get(rel) not in (None, tid) else FILE_TEMPLATE
         local.downloader.settings['output'] = str(folder_dir / template)
-        try:
-            _, path = local.downloader.download_song(song)
-        except Exception:
-            path = None
+        path = None
+        for attempt in range(DOWNLOAD_ATTEMPTS):
+            try:
+                _, path = local.downloader.download_song(song)
+            except Exception:
+                path = None
+            if path:
+                break
+            if not song.download_url:
+                # spotdl found nothing: try our own search (it accepts titles with a translation added).
+                _use_youtube_music_match(local, song)
+                if not song.download_url:
+                    break  # not on YouTube Music, retrying won't help
+            import time
+            time.sleep(3 * (attempt + 1))
         info = {**plan['info'].get(tid, {})}
         info['duration'] = info.get('duration') or round(song.duration or 0)
         with lock:
@@ -457,8 +474,9 @@ def _download_all(sp, root, config, plan, library, progress):
                                'downloaded_at': datetime.now().isoformat(timespec='seconds')}
             else:
                 tracks[tid] = {**info, 'path': None, 'folder': folder, 'status': 'failed',
-                               'error': 'Could not be downloaded'}
-                _remove_empty({folder_dir}, stop=root)
+                               'error': 'Not found on YouTube Music' if not song.download_url else 'Could not be downloaded'}
+                # Removed at the end: another worker may be writing a song of the same album there.
+                failed_folders.add(folder_dir)
             state['current'].remove(label(tid))
             state['done'] += 1
             report()
@@ -467,32 +485,71 @@ def _download_all(sp, root, config, plan, library, progress):
 
     with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as pool:
         list(pool.map(work, ids))
+    _remove_empty(failed_folders, stop=root)
     save_library(library)
 
 
-def _complete_from_youtube_music(client, data):
-    """Fill the duration, cover, album and year of a song from its YouTube Music match."""
-    title, artist = _norm(data['name']), _artist_key(data['artist'])
-    queries = ([data['isrc']] if data.get('isrc') else []) + [f"{data['artist']} {data['name']}"]
-    for query in queries:
+def _use_youtube_music_match(local, song):
+    """Set song.download_url from our own YouTube Music search (one client per worker thread)."""
+    if not hasattr(local, 'youtube_music'):
+        from ytmusicapi import YTMusic
+        local.youtube_music = YTMusic()
+    data = {'name': song.name, 'artist': song.artist, 'artists': list(song.artists), 'isrc': song.isrc,
+            'duration': song.duration, 'album_name': song.album_name, 'year': song.year, 'cover_url': song.cover_url}
+    _complete_from_youtube_music(local.youtube_music, data)
+    if data.get('download_url'):
+        song.download_url = data['download_url']
+
+
+def _search_youtube_music(client, query):
+    for attempt in range(DOWNLOAD_ATTEMPTS):
         try:
-            results = client.search(query, filter='songs', limit=5)
+            return client.search(query, filter='songs', limit=5)
         except Exception:
-            continue
+            import time
+            time.sleep(2 * (attempt + 1))
+    return []
+
+
+def _complete_from_youtube_music(client, data):
+    """Fill the duration, cover, album and year of a song from its YouTube Music match, and use that
+    match for the download. Songs without an artist (in some exported files) are searched by title and album."""
+    title, artist = _norm(data['name']), _artist_key(data['artist'])
+    if data['artist']:
+        queries = ([data['isrc']] if data.get('isrc') else []) + [f"{data['artist']} {data['name']}"]
+    else:
+        queries = [f"{data['name']} {data.get('album_name') or ''}".strip(), data['name']]
+    def same_title(found):
+        # YouTube Music titles often add a translation: "Burnin’ Tires (창빈 & 아이엔) Burnin’ Tires (Changbin & I.N)".
+        found = _norm(found or '')
+        return found == title or found.startswith(title + ' ') or (found and title.startswith(found + ' '))
+
+    for query in queries:
+        results = _search_youtube_music(client, query)
+        candidates = []
         for r in results:
             artists = [_artist_key(a.get('name') or '') for a in r.get('artists') or []]
-            same = _norm(r.get('title') or '') == title and (artist in artists or not artist)
-            if same or (query == data.get('isrc') and len(results) == 1):
-                data['duration'] = r.get('duration_seconds') or data['duration']
-                thumbnails = r.get('thumbnails') or []
-                if thumbnails and not data.get('cover_url'):
-                    data['cover_url'] = re.sub(r'=w\d+-h\d+', '=w544-h544', thumbnails[-1]['url'])
-                if r.get('album') and not data.get('album_name'):
-                    data['album_name'] = r['album'].get('name') or data['album_name']
-                if str(r.get('year') or '').isdigit() and not data.get('year'):
-                    data['year'] = int(r['year'])
-                    data['date'] = str(r['year'])
-                return
+            if (artist in artists or not artist) and same_title(r.get('title')):
+                exact = _norm(r.get('title') or '') == title
+                candidates.append((0 if exact else 1, r))
+            elif query == data.get('isrc') and len(results) == 1:
+                candidates.append((2, r))
+        for _, r in sorted(candidates, key=lambda c: c[0])[:1]:
+            data['duration'] = r.get('duration_seconds') or data['duration']
+            thumbnails = r.get('thumbnails') or []
+            if thumbnails and not data.get('cover_url'):
+                data['cover_url'] = re.sub(r'=w\d+-h\d+', '=w544-h544', thumbnails[-1]['url'])
+            if r.get('album') and not data.get('album_name'):
+                data['album_name'] = r['album'].get('name') or data['album_name']
+            if str(r.get('year') or '').isdigit() and not data.get('year'):
+                data['year'] = int(r['year'])
+                data['date'] = str(r['year'])
+            if not data['artist'] and r.get('artists'):
+                data['artists'] = [a['name'] for a in r['artists'] if a.get('name')]
+                data['artist'] = data['album_artist'] = data['artists'][0]
+            if r.get('videoId'):
+                data['download_url'] = f"https://music.youtube.com/watch?v={r['videoId']}"
+            return
 
 
 def artist_genre(resolver, artist_id, artist_name):
@@ -564,6 +621,8 @@ def write_playlists(root, contents, library):
             rel = os.path.relpath(root / record['path'], folder).replace(os.sep, '/')
             lines.append(f"#EXTINF:{record.get('duration', -1)},{', '.join(record.get('artists', []))} - {record.get('title', '')}")
             lines.append(rel)
+        if len(lines) == 2:
+            continue  # no downloaded song: no playlist file (an old one is removed below)
         (base_dir / filename).write_text('\n'.join(lines) + '\n', encoding='utf-8')
         written[playlist_id] = filename
 

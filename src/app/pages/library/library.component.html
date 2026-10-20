@@ -1,7 +1,7 @@
 <div class="flex flex-wrap items-end justify-between gap-4">
   <div>
     <h1 class="page-title">Library</h1>
-    <p class="page-subtitle">
+    <p *ngIf="state" class="page-subtitle">
       Find downloads here:
       <button type="button" (click)="reveal()" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-500">{{ state?.music_dir }}</button>.
     </p>
@@ -76,7 +76,7 @@
 </section>
 
 <!-- Devices -->
-<section class="mt-10">
+<section *ngIf="state" class="mt-10">
   <h2 class="font-semibold">On your devices</h2>
   <div class="mt-4 grid gap-3 sm:grid-cols-2">
     <div *ngIf="state?.platform !== 'Windows'" class="card p-5 text-sm text-zinc-600">

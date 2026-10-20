@@ -162,7 +162,7 @@
         </button>
       </label>
       <p class="mt-3">iPhone, set up once:</p>
-      <p class="mt-1">With Apple Music or iTunes Match, turn on Sync Library on the Mac and the iPhone. New songs arrive by themselves.</p>
+      <p class="mt-1">With an Apple Music or iTunes Match subscription, turn on Sync Library on the Mac and the iPhone. New songs arrive by themselves.</p>
       <p class="mt-1">Without it, in Finder select the iPhone, sync the “Music Sorter” playlists and turn on “Show this iPhone when on Wi-Fi”. It syncs while the iPhone charges on the same Wi-Fi.</p>
       <button *ngIf="state?.apple_music?.available" class="btn-outline mt-4" (click)="updateAppleMusic()"
               [disabled]="state?.job?.running || state?.apple_music?.job?.running">

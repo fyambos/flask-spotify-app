@@ -234,6 +234,25 @@ def unlike_tracks(sp, track_ids):
         sp._delete('me/library', uris=','.join(uris[i:i + 40]))
 
 
+def create_playlist(sp, name):
+    """Create a private playlist (POST /me/playlists, which replaced /users/{id}/playlists in 2026). Returns its id."""
+    _forget_snapshots()
+    return sp._post('me/playlists', payload={'name': name, 'public': False})['id']
+
+
+def keys_present():
+    return bool(os.getenv('SPOTIFY_CLIENT_ID') and os.getenv('SPOTIFY_CLIENT_SECRET'))
+
+
+def logged_in():
+    return (DATA_DIR / '.spotify-token').exists()
+
+
+def blocked():
+    """True while Spotify blocks the app (quota used up)."""
+    return _blocked_until() > time.time()
+
+
 def my_playlists(sp):
     return _paginate(sp, sp.current_user_playlists(limit=50))
 

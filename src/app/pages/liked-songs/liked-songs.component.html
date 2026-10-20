@@ -1,17 +1,87 @@
 <div class="flex flex-wrap items-end justify-between gap-4">
   <div>
-    <h1 class="page-title">Liked Songs</h1>
-    <p class="page-subtitle">Organize your liked songs into playlists. Changes won't affect Spotify until you save them.</p>
+    <h1 class="page-title">Sort Playlists</h1>
+    <p class="page-subtitle">Organize the songs of a playlist into playlists of your choice. Changes won't affect Spotify until you save them.</p>
   </div>
-  <div *ngIf="state?.preview" class="flex items-center gap-2">
+  <div class="flex items-center gap-2">
+    <a routerLink="/sort/rules" class="btn-outline">
+      <lucide-icon name="list-music" [size]="16"></lucide-icon> Playlists &amp; rules
+    </a>
+  </div>
+</div>
+
+<!-- Sort from -->
+<div *ngIf="playlists.length" class="mt-6 flex flex-wrap items-center gap-2 text-sm">
+  <span class="font-medium text-zinc-500">Sort from</span>
+  <span *ngFor="let id of sources" class="chip gap-1 bg-zinc-900 py-1 pl-3 pr-1.5 text-white">
+    {{ sourceName(id) }}
+    <button *ngIf="sources.length > 1" (click)="removeSource(id)" class="inline-flex rounded-full p-0.5 hover:bg-white/20" aria-label="Remove">
+      <lucide-icon name="x" [size]="12"></lucide-icon>
+    </button>
+  </span>
+  <select class="input w-auto rounded-full py-1 pr-8 text-sm" [(ngModel)]="addingSource" (ngModelChange)="addSource($event)">
+    <option value="" disabled>Add a playlist</option>
+    <option *ngFor="let p of sourceChoices" [value]="p.id">{{ p.name }}</option>
+  </select>
+</div>
+
+<!-- Sorted songs not on Spotify yet -->
+<div *ngIf="pending && !sync" class="card mt-4 flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+  <span class="inline-flex text-amber-500"><lucide-icon name="refresh-cw" [size]="16"></lucide-icon></span>
+  <span class="flex-1 text-zinc-700">Not synced with Spotify. {{ pending }} songs wait.</span>
+  <button *ngIf="status?.spotify?.connected && !status?.spotify?.limit" class="btn-primary px-3 py-1.5" (click)="openSync()">Sync with Spotify</button>
+</div>
+
+<!-- Sync with Spotify: what will change -->
+<div *ngIf="sync" class="card mt-4 p-5">
+  <div class="flex items-center justify-between">
+    <h2 class="font-semibold">Sync with Spotify</h2>
+    <button class="icon-btn" (click)="sync = null" aria-label="Close"><lucide-icon name="x" [size]="16"></lucide-icon></button>
+  </div>
+  <p *ngIf="sync.loading" class="mt-2 flex items-center gap-2 text-sm text-zinc-500">
+    <span class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="14"></lucide-icon></span> Reading your playlists on Spotify
+  </p>
+  <ng-container *ngIf="!sync.loading">
+    <p class="mt-1 text-sm text-zinc-500">
+      {{ syncTotals.add }} songs to add on Spotify<ng-container *ngIf="syncTotals.removed">, {{ syncTotals.removed }} removed on Spotify, also removed in the app</ng-container><ng-container *ngIf="syncTotals.create">, {{ syncTotals.create }} new playlists</ng-container>.
+    </p>
+    <ul class="mt-3 divide-y divide-zinc-100 text-sm">
+      <li *ngFor="let c of sync.changes" class="flex items-center justify-between gap-3 py-2">
+        <span class="font-medium">{{ c.name }} <span *ngIf="c.create" class="chip ml-1">New</span></span>
+        <span class="text-zinc-500">
+          <span *ngIf="c.to_add.length" class="text-brand-600">+{{ c.to_add.length }}</span>
+          <span *ngIf="c.removed_on_spotify.length" class="ml-2 text-rose-500">−{{ c.removed_on_spotify.length }}</span>
+        </span>
+      </li>
+    </ul>
+    <p *ngIf="!sync.changes.length" class="mt-2 text-sm text-zinc-500">Nothing to sync.</p>
+    <button class="btn-brand mt-4" [disabled]="sync.running || !sync.changes.length" (click)="runSync()">
+      <span class="inline-flex animate-spin"><lucide-icon *ngIf="sync.running" name="loader-2" [size]="16"></lucide-icon></span>
+      {{ sync.running ? 'Syncing…' : 'Sync' }}
+    </button>
+  </ng-container>
+</div>
+
+<!-- No playlists to sort into yet -->
+<div *ngIf="config_loaded && !playlists.length" class="card mt-8 flex flex-col items-center px-6 py-14 text-center">
+  <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
+    <lucide-icon name="list-music" [size]="26"></lucide-icon>
+  </span>
+  <h2 class="mt-5 text-lg font-semibold tracking-tight">Choose the playlists to sort into</h2>
+  <p class="mt-1 max-w-sm text-sm text-zinc-500">Music Sorter learns how you already sorted them.</p>
+  <a routerLink="/setup" [queryParams]="{ step: 'choose' }" class="btn-primary mt-6 px-5 py-2.5">
+    Choose playlists <lucide-icon name="arrow-right" [size]="16"></lucide-icon>
+  </a>
+</div>
+
+<div *ngIf="state?.preview && playlists.length" class="mt-6 flex flex-wrap items-center justify-end gap-2">
     <button class="btn-outline" (click)="startPreview()" [disabled]="state?.job?.running">
       <lucide-icon name="refresh-cw" [size]="16" [class.animate-spin]="state?.job?.running"></lucide-icon> Re-analyse
     </button>
     <button class="btn-brand" (click)="apply()" [disabled]="state?.job?.running || applying || !count('planned')">
       <span class="inline-flex animate-spin"><lucide-icon *ngIf="applying" name="loader-2" [size]="16"></lucide-icon></span>
-      {{ applying ? 'Adding…' : 'Add ' + count('planned') + ' to Spotify' }}
+      {{ applying ? 'Saving…' : spotifyReady ? 'Add ' + count('planned') + ' to Spotify' : 'Save ' + count('planned') }}
     </button>
-  </div>
 </div>
 
 <!-- Progress -->
@@ -35,18 +105,18 @@
 </div>
 
 <!-- Empty state -->
-<div *ngIf="state && !state.preview && !state.job.running" class="card mt-8 flex flex-col items-center px-6 py-14 text-center">
+<div *ngIf="state && !state.preview && !state.job.running && playlists.length" class="card mt-8 flex flex-col items-center px-6 py-14 text-center">
   <span class="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
     <lucide-icon name="heart" [size]="26"></lucide-icon>
   </span>
-  <h2 class="mt-5 text-lg font-semibold tracking-tight">Sort your liked songs</h2>
-  <p class="mt-1 max-w-sm text-sm text-zinc-500">Smart genre suggestions for your liked songs. Review the recommendations, then add them to your playlists.</p>
+  <h2 class="mt-5 text-lg font-semibold tracking-tight">{{ onlyLiked ? 'Sort your Liked Songs' : 'Sort your songs' }}</h2>
+  <p class="mt-1 max-w-sm text-sm text-zinc-500">Smart playlist suggestions for your songs. Review the recommendations, then add them to your playlists.</p>
   <button class="btn-primary mt-6 px-5 py-2.5" (click)="startPreview()">
-    <lucide-icon name="sparkles" [size]="16"></lucide-icon> Analyse my likes
+    <lucide-icon name="sparkles" [size]="16"></lucide-icon> {{ onlyLiked ? 'Analyse my likes' : 'Analyse' }}
   </button>
 </div>
 
-<ng-container *ngIf="state?.preview">
+<ng-container *ngIf="state?.preview && playlists.length">
   <!-- Summary -->
   <div class="mt-6 grid gap-3 sm:grid-cols-3">
     <div class="card p-5">
@@ -115,7 +185,7 @@
       <div *ngIf="filter === 'review' || filter === 'planned'" class="flex w-full shrink-0 items-center gap-2 sm:w-auto"
            [class.sm:ml-2]="filter === 'planned'">
         <select [(ngModel)]="choices[item.track_id]" class="input w-auto rounded-full py-1.5 pr-8">
-          <option [ngValue]="undefined" disabled>{{ filter === 'review' ? 'Choose genre' : 'Change' }}</option>
+          <option [ngValue]="undefined" disabled>{{ filter === 'review' ? 'Choose playlist' : 'Change' }}</option>
           <option *ngFor="let p of playlists" [value]="p.id">{{ p.name }}{{ p.id === item.suggestion ? ' (suggested)' : '' }}</option>
         </select>
         <label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-zinc-500" title="Remember this choice for the artist">

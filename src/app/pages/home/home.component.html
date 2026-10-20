@@ -19,8 +19,8 @@
           Sync <lucide-icon name="arrow-right" [size]="14"></lucide-icon>
         </div>
       </a>
-      <a routerLink="/likes" class="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 transition hover:bg-white/10">
-        <div class="text-xs font-medium uppercase tracking-wide text-zinc-400">Liked Songs to review</div>
+      <a routerLink="/sort" class="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10 transition hover:bg-white/10">
+        <div class="text-xs font-medium uppercase tracking-wide text-zinc-400">Songs to review</div>
         <div class="mt-1 text-2xl font-semibold tabular-nums">{{ likes?.preview ? count('review') : '–' }}</div>
         <div class="flex items-center gap-1 text-sm text-brand-300">
           {{ likes?.preview ? count('planned') + ' ready to add' : 'Analyse my likes' }} <lucide-icon name="arrow-right" [size]="14"></lucide-icon>

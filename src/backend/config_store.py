@@ -13,15 +13,22 @@ DATA_DIR = Path(os.getenv('SPOTSORT_DATA_DIR', BACKEND_DIR / 'data')).expanduser
 CONFIG_PATH = DATA_DIR / 'config.json'
 
 DEFAULT_CONFIG = {
-    'music_dir': '~/Music/Spotify',
+    # The system Music folder (~/Music on macOS, C:\\Users\\<name>\\Music on Windows).
+    'music_dir': '~/Music',
     'audio_format': 'mp3',
-    # Which playlists are downloaded: 'all', 'liked' (Liked Songs only) or 'selected'
-    # (genre playlists + the ids in 'playlists').
-    'download': {'mode': 'all', 'playlists': []},
-    # Folder for downloaded songs that are not in your Liked Songs.
-    'non_liked': {'folder': 'Non-Liked Songs'},
-    # Downloaded songs that are no longer in any synced playlist: keep, move or delete.
+    # Which playlists are downloaded: 'all' (your playlists and Liked Songs) or 'selected'
+    # (the ids in 'playlists'). 'seen': playlists already shown, the others are "New".
+    'download': {'mode': 'all', 'playlists': [], 'seen': []},
+    # Where files go, inside <music_dir>/<folder>/:
+    # 'artist_album' <album artist>/<album>/, 'artist' <album artist>/, 'one_folder' (all together),
+    # 'first_playlist' <first playlist of the song in 'order'>/.
+    'layout': {'preset': 'artist_album', 'folder': 'Music Sorter', 'order': []},
+    # Downloaded songs that are no longer in any downloaded playlist: keep, move or delete.
     'removed': {'mode': 'move', 'folder': '_Removed'},
+    # Playlists sorted into the "sort into" playlists ('liked' is Liked Songs).
+    'sort_from': ['liked'],
+    # Without Spotify: show a reminder when the last import is more than a week old.
+    'import_reminder': True,
     # cookies.txt exported from a browser logged in to YouTube Music Premium (256 kbps audio).
     'youtube_cookies': '',
     # macOS: update Apple Music at the end of each library sync.
@@ -58,7 +65,18 @@ def _normalize(config):
         config.setdefault('playlist_folders', config.pop('apple_folders'))
     if 'download' not in config and 'enabled' in config.get('non_liked', {}):  # replaced by 'download'
         config['download'] = {'mode': 'all' if config['non_liked']['enabled'] else 'selected', 'playlists': []}
+    non_liked = config.pop('non_liked', None)
+    download = config.get('download')
+    if download and download.get('mode') == 'liked':  # "Liked Songs only" is gone
+        download.update(mode='selected', playlists=['liked'])
+    elif download and download.get('mode') == 'selected' and non_liked is not None:
+        # The sorting playlists used to be always downloaded: keep them checked.
+        ids = [p['playlist_id'] for p in config.get('playlists', []) if p.get('playlist_id')]
+        download['playlists'] = list(dict.fromkeys(ids + ['liked'] + download.get('playlists', [])))
+    if download is not None:
+        download.setdefault('seen', [])
     config = {**DEFAULT_CONFIG, **config}
+    config['layout'] = {**DEFAULT_CONFIG['layout'], **config['layout']}
     for entry in config['playlists']:
         for field in RULE_FIELDS:
             entry.setdefault(field, [])
@@ -82,8 +100,9 @@ def save_config(config):
 
 
 def add_playlist(name, playlist_id, genre_names, **rules):
+    """A "sort into" playlist. playlist_id None: a playlist that only exists in the app for now."""
     config = load_config()
-    if any(p['playlist_id'] == playlist_id for p in config['playlists']):
+    if playlist_id and any(p['playlist_id'] == playlist_id for p in config['playlists']):
         raise ValueError('This playlist has already been added!')
     entry = {'id': _new_id(), 'name': name, 'playlist_id': playlist_id, 'genre_names': genre_names}
     entry.update({f: rules.get(f, []) for f in RULE_FIELDS if f != 'genre_names'})
@@ -128,7 +147,9 @@ def set_artist_rule(artist_id, artist_name, entry_id):
 
 def update_settings(changes):
     config = load_config()
-    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'non_liked', 'download', 'removed', 'youtube_cookies', 'apple_music_auto', 'playlist_folders', 'default_folder', 'folders'):
+    for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'download', 'layout',
+                'removed', 'sort_from', 'import_reminder', 'youtube_cookies', 'apple_music_auto', 'playlist_folders',
+                'default_folder', 'folders'):
         if key in changes:
             config[key] = changes[key]
     save_config(config)

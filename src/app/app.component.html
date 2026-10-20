@@ -56,6 +56,13 @@
     </nav>
 
     <main class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
+      <!-- Playlists from a file: reminder to import them again -->
+      <div *ngIf="status?.import?.reminder" class="card mb-6 flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+        <span class="inline-flex text-amber-500"><lucide-icon name="refresh-cw" [size]="16"></lucide-icon></span>
+        <span class="flex-1 text-zinc-700">Last import: {{ status?.import?.days }} days ago.</span>
+        <a routerLink="/import" class="btn-primary px-3 py-1.5">Import</a>
+        <button class="btn-ghost px-3 py-1.5" (click)="dismissReminder()">Don't show again</button>
+      </div>
       <router-outlet></router-outlet>
     </main>
   </div>

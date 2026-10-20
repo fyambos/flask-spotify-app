@@ -7,13 +7,17 @@ import { StatsComponent } from './pages/stats/stats.component';
 import { SettingsComponent } from './pages/settings/settings.component';
 import { LibraryComponent } from './pages/library/library.component';
 import { HomeComponent } from './pages/home/home.component';
+import { ImportComponent } from './pages/import/import.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
   { path: 'home', component: HomeComponent },
   { path: 'setup', component: SetupComponent },
-  { path: 'likes', component: LikedSongsComponent },
-  { path: 'genres', component: GenresComponent },
+  { path: 'sort', component: LikedSongsComponent },
+  { path: 'sort/rules', component: GenresComponent },
+  { path: 'import', component: ImportComponent },
+  { path: 'likes', redirectTo: '/sort' },
+  { path: 'genres', redirectTo: '/sort/rules' },
   { path: 'library', component: LibraryComponent },
   { path: 'stats', component: StatsComponent },
   { path: 'settings', component: SettingsComponent },

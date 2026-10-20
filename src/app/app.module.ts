@@ -26,6 +26,7 @@ import { StatsComponent } from './pages/stats/stats.component';
 import { SettingsComponent } from './pages/settings/settings.component';
 import { LibraryComponent } from './pages/library/library.component';
 import { HomeComponent } from './pages/home/home.component';
+import { ImportComponent } from './pages/import/import.component';
 
 @NgModule({
   declarations: [
@@ -42,6 +43,7 @@ import { HomeComponent } from './pages/home/home.component';
     SettingsComponent,
     LibraryComponent,
     HomeComponent,
+    ImportComponent,
   ],
   imports: [
     BrowserModule,

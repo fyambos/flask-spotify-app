@@ -1,18 +1,17 @@
-"""Local copy of your Spotify library.
+"""Local copy of your playlists as music files.
 
-- Songs of the genre playlists are downloaded once into <music_dir>/<Genre>/ (the first
-  genre playlist in priority order decides the folder).
-- Optionally, songs of your other playlists that are not in your Liked Songs go to
-  <music_dir>/<non_liked folder>/, depending on Settings > Playlists to download (all
-  playlists, Liked Songs only, or a chosen list). Liked songs not sorted yet are not downloaded.
-- Every playlist you own (genre playlists, other playlists, Liked Songs) is written as an
-  .m3u8 file in <music_dir>/Playlists/, pointing to the downloaded files. Nothing is
-  downloaded twice.
-- Spotify is the reference: a song moved to another genre playlist moves to that folder;
-  a song no longer in any synced playlist is kept, moved to the removed folder or deleted.
+- The downloaded playlists (Settings > Playlists to download) are all your playlists and
+  Liked Songs, or the ones you choose. Sorting has no effect on what is downloaded.
+- Each song is downloaded once, into <music_dir>/<layout folder>/ following Settings >
+  File layout (album artist / album by default). A song in several playlists has one file.
+- Every downloaded playlist is written as an .m3u8 file in <layout folder>/Playlists/.
+- The playlists are the reference: a song no longer in any downloaded playlist is kept,
+  moved to the removed folder or deleted. Changing the layout moves the files at the next
+  Sync, they are never downloaded again.
 
-Audio comes from YouTube Music through spotdl, using the metadata we already have from
-Spotify (spotdl's own Spotify access is never used).
+The playlists come from catalog.py (the Spotify API, or an imported file). Audio comes
+from YouTube Music through spotdl, using the metadata we already have (spotdl's own
+Spotify access is never used).
 """
 import json
 import os
@@ -22,34 +21,52 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
+import catalog as catalog_store
 import config_store
+import sort_state
 from config_store import DATA_DIR
-from spotify_client import liked_tracks, my_playlists, playlist_tracks
 
 LIBRARY_PATH = DATA_DIR / 'library.json'
+IMPORTED_PATH = DATA_DIR / 'playlists-import.json'  # changes found by the last playlists file import
 PLAN_PATH = DATA_DIR / 'library-plan.json'
 PLAYLISTS_FOLDER = 'Playlists'
-LIKED_PLAYLIST_ID = 'liked'
-LIKED_PLAYLIST_NAME = 'Liked Songs'
+LIKED_PLAYLIST_ID = catalog_store.LIKED_ID
+LIKED_PLAYLIST_NAME = catalog_store.LIKED_NAME
+VARIOUS_ARTISTS = 'Various Artists'
 FILE_TEMPLATE = '{artists} - {title}.{output-ext}'
 FILE_TEMPLATE_WITH_ALBUM = '{artists} - {title} ({album}).{output-ext}'
-INVISIBLE = '⠀ㅤ​'
+INVISIBLE = catalog_store.INVISIBLE
+LAYOUTS = ('artist_album', 'artist', 'one_folder', 'first_playlist')
 
 
 def music_root(config):
     return Path(os.path.expanduser(config['music_dir']))
 
 
+WINDOWS_RESERVED = {'con', 'prn', 'aux', 'nul', *(f'com{i}' for i in range(1, 10)), *(f'lpt{i}' for i in range(1, 10))}
+MAX_NAME = 120  # characters per folder or file name, to stay far from the 260 characters of a Windows path
+
+
 def safe_name(name):
     """A name usable as a file or folder name on macOS, Windows and Android."""
-    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', ' ', name).strip(f' .\t{INVISIBLE}')
-    return re.sub(r'\s+', ' ', name) or 'Untitled'
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', ' ', name or '')
+    name = re.sub(r'\s+', ' ', name)[:MAX_NAME]
+    # Windows drops trailing dots and spaces ("R.E.M." would become "R.E.M").
+    name = name.strip(f' .\t{INVISIBLE}') or 'Untitled'
+    if name.split('.')[0].strip().lower() in WINDOWS_RESERVED:
+        name = f'{name}_'
+    return name
 
 
 def load_library():
     if LIBRARY_PATH.exists():
-        return json.loads(LIBRARY_PATH.read_text(encoding='utf-8'))
-    return {'tracks': {}, 'playlists': {}}
+        library = json.loads(LIBRARY_PATH.read_text(encoding='utf-8'))
+    else:
+        library = {'tracks': {}, 'playlists': {}}
+    if 'root' not in library:
+        # Paths are relative to the music folder they were downloaded to.
+        library['root'] = str(music_root(config_store.load_config()))
+    return library
 
 
 def save_library(library):
@@ -76,101 +93,155 @@ def _track_info(track):
     }
 
 
+# --- Which playlists, and where each file goes ---
+
+def downloaded_playlists(config, catalog):
+    """Ids of the downloaded playlists, in catalog order."""
+    download = config['download']
+    if download['mode'] == 'all':
+        # Playlists of other users are left out (unknown owner, from a file: included).
+        return [pid for pid, p in catalog['playlists'].items() if p.get('owned') is not False]
+    chosen = set(download.get('playlists') or [])
+    return [pid for pid in catalog['playlists'] if pid in chosen]
+
+
+def layout_base(config):
+    return safe_name(config['layout'].get('folder') or 'Music Sorter')
+
+
+def album_artist(track):
+    album = track.get('album') or {}
+    if album.get('album_type') == 'compilation':
+        return VARIOUS_ARTISTS
+    artists = album.get('artists') or track.get('artists') or []
+    return artists[0]['name'] if artists and artists[0].get('name') else 'Unknown Artist'
+
+
+def track_folder(config, track, playlist_names):
+    """Folder of a song, relative to the music folder. playlist_names: its downloaded playlists, in layout order."""
+    base = layout_base(config)
+    preset = config['layout'].get('preset')
+    if preset == 'one_folder':
+        return base
+    if preset == 'first_playlist':
+        return f'{base}/{safe_name(playlist_names[0])}' if playlist_names else base
+    artist = safe_name(album_artist(track))
+    if preset == 'artist':
+        return f'{base}/{artist}'
+    album = safe_name((track.get('album') or {}).get('name') or track['name'])
+    return f'{base}/{artist}/{album}'
+
+
+def _ordered(config, playlist_ids):
+    """Playlists in the order of Settings > File layout (the others after, in catalog order)."""
+    order = {pid: i for i, pid in enumerate(config['layout'].get('order') or [])}
+    return sorted(playlist_ids, key=lambda pid: order.get(pid, len(order)))
+
+
+def removed_folder(config):
+    return f"{layout_base(config)}/{safe_name(config['removed']['folder'])}"
+
+
 # --- Plan: what the local copy should look like ---
 
-def build_plan(sp, progress):
+def current_catalog(sp, progress):
+    """The playlists from Spotify when it is connected, else the last imported file."""
+    from spotify_client import SpotifyLimitError, keys_present, logged_in
+
+    stored = catalog_store.load()
+    if not stored.get('source'):
+        stored = catalog_store.from_last_check() or stored
+    if keys_present() and logged_in() and stored.get('source') in (None, 'spotify'):
+        try:
+            catalog = catalog_store.refresh_from_spotify(sp, progress)
+        except SpotifyLimitError:
+            if not stored.get('source'):
+                raise
+            catalog = stored  # Spotify blocks the app for now: the last copy is used
+        else:
+            if sort_state.pending_count(catalog) == 0:
+                sort_state.take_spotify_as_base(catalog)
+            return sort_state.view(catalog)
+    elif not stored.get('source'):
+        raise RuntimeError('No playlists yet. Connect Spotify or import your playlists first.')
+    return sort_state.view(stored)
+
+
+def build_plan(sp, progress, catalog=None):
     config = config_store.load_config()
     root = music_root(config)
     library = load_library()
-    non_liked = config['non_liked']
-    download = config.get('download') or {'mode': 'all', 'playlists': []}
-    chosen = set(download.get('playlists') or [])
+    catalog = catalog or current_catalog(sp, progress)
 
-    progress(step='Reading your Liked Songs')
-    liked = liked_tracks(sp)
-    liked_ids = [t['id'] for t in liked]
-    liked_set = set(liked_ids)
+    progress(step='Checking your files')
+    playlist_ids = _ordered(config, downloaded_playlists(config, catalog))
+    in_playlists = defaultdict(list)
+    for pid in playlist_ids:
+        for tid in catalog['playlists'][pid]['track_ids']:
+            if pid not in in_playlists[tid]:
+                in_playlists[tid].append(pid)
 
-    meta = {t['id']: t for t in liked}
+    # macOS and Windows ignore case: "ABBA" and "Abba" are one folder, keep one spelling (the one on disk first).
+    spelling = {r['folder'].lower(): r['folder'] for r in library['tracks'].values() if r.get('folder')}
     desired = {}
-    contents = {}
+    for tid, pids in in_playlists.items():
+        track = catalog['tracks'].get(tid)
+        if track:
+            folder = track_folder(config, track, [catalog['playlists'][p]['name'] for p in pids])
+            desired[tid] = spelling.setdefault(folder.lower(), folder)
 
-    genres = config['playlists']
-    for i, entry in enumerate(genres, 1):
-        progress(step=f"Reading {entry['name']}", done=i, total=len(genres))
-        tracks = playlist_tracks(sp, entry['playlist_id'])
-        contents[entry['playlist_id']] = {'name': entry['name'], 'track_ids': [t['id'] for t in tracks]}
-        for t in tracks:
-            meta.setdefault(t['id'], t)
-            if download['mode'] == 'liked' and t['id'] not in liked_set:
-                continue
-            desired.setdefault(t['id'], safe_name(entry['name']))
-
-    progress(step='Reading your other playlists')
-    me = sp.me()['id']
-    genre_ids = {e['playlist_id'] for e in genres}
-    others = [p for p in my_playlists(sp)
-              if p['id'] not in genre_ids and ((p.get('owner') or {}).get('id') == me or p.get('collaborative'))]
-    pending_liked = set(liked_set - desired.keys())
-    for i, p in enumerate(others, 1):
-        progress(step=f"Reading {p['name'].strip(INVISIBLE + ' ')}", done=i, total=len(others))
-        try:
-            tracks = playlist_tracks(sp, p['id'])
-        except Exception:
-            continue
-        contents[p['id']] = {'name': p['name'], 'track_ids': [t['id'] for t in tracks]}
-        for t in tracks:
-            meta.setdefault(t['id'], t)
-            if t['id'] in desired:
-                continue
-            if t['id'] in liked_set:
-                pending_liked.add(t['id'])
-            elif download['mode'] == 'all' or (download['mode'] == 'selected' and p['id'] in chosen):
-                desired[t['id']] = safe_name(non_liked['folder'])
-    contents[LIKED_PLAYLIST_ID] = {'name': LIKED_PLAYLIST_NAME, 'track_ids': liked_ids}
-
+    old_root = Path(library['root'])
     to_download, to_move, to_remove = [], [], []
     for track_id, folder in desired.items():
         record = library['tracks'].get(track_id)
-        exists = record and record.get('path') and (root / record['path']).exists()
+        exists = record and record.get('path') and (old_root / record['path']).exists()
         if not exists:
             to_download.append(track_id)
-        elif record['folder'] != folder or record['status'] != 'ok':
+        elif record['folder'] != folder or record['status'] != 'ok' or old_root != root:
             to_move.append(track_id)
+    gone_folder = removed_folder(config)
     for track_id, record in library['tracks'].items():
-        if track_id not in desired and record['status'] == 'ok':
+        if track_id in desired or not record.get('path') or catalog.get('partial'):
+            continue
+        if record['status'] == 'ok':
             to_remove.append(track_id)
+        elif record['status'] == 'removed' and config['removed']['mode'] == 'move' \
+                and (record['folder'] != gone_folder or old_root != root) and (old_root / record['path']).exists():
+            to_move.append(track_id)  # already removed, in the old removed folder
 
+    contents = {pid: {'name': catalog['playlists'][pid]['name'], 'track_ids': catalog['playlists'][pid]['track_ids']}
+                for pid in playlist_ids}
     plan = {
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'music_dir': str(root),
+        'source': catalog.get('source'),
         'desired': desired,
         'to_download': to_download,
         'to_move': to_move,
         'to_remove': to_remove,
-        'pending_liked': len(pending_liked),
         'playlists': contents,
-        'meta': {tid: _song_data(meta[tid], desired[tid]) for tid in to_download if tid in meta},
-        'info': {tid: _track_info(meta[tid]) for tid in desired if tid in meta},
+        'meta': {tid: _song_data(catalog['tracks'][tid]) for tid in to_download},
+        'info': {tid: _track_info(catalog['tracks'][tid]) for tid in desired},
     }
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     PLAN_PATH.write_text(json.dumps(plan, ensure_ascii=False), encoding='utf-8')
     return plan
 
 
-def _song_data(track, folder):
+def _song_data(track):
     album = track.get('album') or {}
     images = album.get('images') or []
     release = album.get('release_date') or ''
+    artists = [a['name'] for a in track['artists']] or ['']
     return {
         'name': track['name'],
-        'artists': [a['name'] for a in track['artists']],
-        'artist': track['artists'][0]['name'],
-        'genres': [folder],
+        'artists': artists,
+        'artist': artists[0],
+        'genres': [],
         'disc_number': track.get('disc_number') or 1,
         'disc_count': 1,
         'album_name': album.get('name') or track['name'],
-        'album_artist': (album.get('artists') or track['artists'])[0]['name'],
+        'album_artist': album_artist(track) if album.get('artists') else artists[0],
         'duration': round((track.get('duration_ms') or 0) / 1000),
         'year': int(release[:4]) if release[:4].isdigit() else 0,
         'date': release,
@@ -191,16 +262,16 @@ def _song_data(track, folder):
         'list_url': None,
         'list_position': None,
         'list_length': None,
-        'artist_id': track['artists'][0].get('id') or '',
+        'artist_id': track['artists'][0].get('id') or '' if track['artists'] else '',
         'album_type': album.get('album_type') or 'album',
     }
 
 
 # --- Sync: apply the plan ---
 
-def sync(sp, progress=None, apply=True):
+def sync(sp, progress=None, apply=True, catalog=None):
     progress = progress or (lambda **kw: None)
-    plan = build_plan(sp, progress)
+    plan = build_plan(sp, progress, catalog)
     if not apply:
         progress(step='Done')
         return plan
@@ -209,13 +280,29 @@ def sync(sp, progress=None, apply=True):
     root = music_root(config)
     root.mkdir(parents=True, exist_ok=True)
     library = load_library()
+    old_root = first_root = Path(library['root'])
     tracks = library['tracks']
+    left = set()  # folders files were moved out of, removed at the end if empty
 
+    gone_folder = removed_folder(config)
     for i, track_id in enumerate(plan['to_move'], 1):
         progress(step='Moving songs to their new folder', done=i, total=len(plan['to_move']))
-        _move(root, tracks[track_id], plan['desired'][track_id])
-        tracks[track_id]['status'] = 'ok'
-        tracks[track_id].pop('removed_at', None)
+        record = tracks[track_id]
+        target = plan['desired'].get(track_id, gone_folder)
+        left.add((old_root / record['path']).parent)
+        _move(old_root, root, record, target)
+        if track_id in plan['desired']:
+            record['status'] = 'ok'
+            record.pop('removed_at', None)
+        if i % 50 == 0:
+            save_library(library)
+    # Every path is now relative to the current music folder.
+    if old_root != root:
+        for record in tracks.values():
+            if record.get('path') and not (root / record['path']).exists() and (old_root / record['path']).exists():
+                record['path'] = os.path.relpath(old_root / record['path'], root)
+        library['root'] = str(root)
+        old_root = root
     save_library(library)
 
     _download_all(sp, root, config, plan, library, progress)
@@ -225,14 +312,19 @@ def sync(sp, progress=None, apply=True):
         progress(step='Handling removed songs', done=i, total=len(plan['to_remove']))
         record = tracks[track_id]
         if removed['mode'] == 'delete':
+            left.add((root / record['path']).parent)
             (root / record['path']).unlink(missing_ok=True)
             del tracks[track_id]
             continue
         if removed['mode'] == 'move':
-            _move(root, record, safe_name(removed['folder']))
+            left.add((root / record['path']).parent)
+            _move(root, root, record, gone_folder)
         record['status'] = 'removed'
         record['removed_at'] = datetime.now().isoformat(timespec='seconds')
     save_library(library)
+    _remove_empty(left, stop=root)
+    if first_root != root:
+        _remove_empty({d for d in left if first_root in d.parents}, stop=first_root)
 
     progress(step='Writing playlists', current=[])
     write_playlists(root, plan['playlists'], library)
@@ -245,8 +337,8 @@ def sync(sp, progress=None, apply=True):
     return plan
 
 
-def _move(root, record, folder):
-    src = root / record['path']
+def _move(old_root, root, record, folder):
+    src = old_root / record['path']
     dst_dir = root / folder
     dst_dir.mkdir(parents=True, exist_ok=True)
     dst = dst_dir / src.name
@@ -258,6 +350,16 @@ def _move(root, record, folder):
         shutil.move(str(src), str(dst))
     record['path'] = str(dst.relative_to(root))
     record['folder'] = folder
+
+
+def _remove_empty(folders, stop):
+    """Remove the folders files were moved out of when nothing is left in them (and their empty parents)."""
+    for folder in sorted(folders, key=lambda d: len(d.parts), reverse=True):
+        while folder != stop and stop in folder.parents and folder.is_dir():
+            if any(f for f in folder.iterdir() if f.name != '.DS_Store'):
+                break
+            shutil.rmtree(folder, ignore_errors=True)
+            folder = folder.parent
 
 
 DOWNLOAD_WORKERS = 4
@@ -300,9 +402,17 @@ def _download_all(sp, root, config, plan, library, progress):
 
     # Genres are looked up before starting (the resolver and its cache are not thread-safe).
     songs = {}
-    for tid in ids:
+    youtube_music = None
+    for i, tid in enumerate(ids, 1):
         data = dict(plan['meta'][tid])
         data['genres'] = [artist_genre(resolver, data['artist_id'], data['artist'])]
+        if not data['duration']:
+            # Songs read from a file: duration, cover and year come from YouTube Music.
+            progress(step='Looking up songs on YouTube Music', done=i, total=len(ids))
+            if youtube_music is None:
+                from ytmusicapi import YTMusic
+                youtube_music = YTMusic()
+            _complete_from_youtube_music(youtube_music, data)
         songs[tid] = Song.from_dict(data)
     resolver.save()
 
@@ -332,7 +442,8 @@ def _download_all(sp, root, config, plan, library, progress):
             _, path = local.downloader.download_song(song)
         except Exception:
             path = None
-        info = plan['info'].get(tid, {})
+        info = {**plan['info'].get(tid, {})}
+        info['duration'] = info.get('duration') or round(song.duration or 0)
         with lock:
             if path and Path(path).exists():
                 tag_file(Path(path), spotify_id=tid)
@@ -342,6 +453,7 @@ def _download_all(sp, root, config, plan, library, progress):
             else:
                 tracks[tid] = {**info, 'path': None, 'folder': folder, 'status': 'failed',
                                'error': 'Could not be downloaded'}
+                _remove_empty({folder_dir}, stop=root)
             state['current'].remove(label(tid))
             state['done'] += 1
             report()
@@ -353,12 +465,38 @@ def _download_all(sp, root, config, plan, library, progress):
     save_library(library)
 
 
+def _complete_from_youtube_music(client, data):
+    """Fill the duration, cover, album and year of a song from its YouTube Music match."""
+    title, artist = _norm(data['name']), _artist_key(data['artist'])
+    queries = ([data['isrc']] if data.get('isrc') else []) + [f"{data['artist']} {data['name']}"]
+    for query in queries:
+        try:
+            results = client.search(query, filter='songs', limit=5)
+        except Exception:
+            continue
+        for r in results:
+            artists = [_artist_key(a.get('name') or '') for a in r.get('artists') or []]
+            same = _norm(r.get('title') or '') == title and (artist in artists or not artist)
+            if same or (query == data.get('isrc') and len(results) == 1):
+                data['duration'] = r.get('duration_seconds') or data['duration']
+                thumbnails = r.get('thumbnails') or []
+                if thumbnails and not data.get('cover_url'):
+                    data['cover_url'] = re.sub(r'=w\d+-h\d+', '=w544-h544', thumbnails[-1]['url'])
+                if r.get('album') and not data.get('album_name'):
+                    data['album_name'] = r['album'].get('name') or data['album_name']
+                if str(r.get('year') or '').isdigit() and not data.get('year'):
+                    data['year'] = int(r['year'])
+                    data['date'] = str(r['year'])
+                return
+
+
 def artist_genre(resolver, artist_id, artist_name):
     """The genre tag, as spotdl wrote it before: the artist's first Spotify genre (Last.fm if none)."""
-    if not artist_id:
+    if not artist_id and not artist_name:
         return ''
-    entry = resolver.artist_genres(artist_id, artist_name)
-    genres = entry.get('spotify') or entry.get('lastfm') or []
+    from genres import artist_key
+    entry = resolver.artist_genres(artist_id or artist_key({'name': artist_name}), artist_name)
+    genres = entry.get('spotify') or entry.get('lastfm') or []  # spotify is None without Spotify
     return genres[0] if genres else ''
 
 
@@ -390,14 +528,15 @@ def tag_file(path, genre=None, spotify_id=None):
 
 
 def write_playlists(root, contents, library):
-    """One .m3u8 per playlist in Playlists/<folder>/, with paths relative to that folder."""
+    """One .m3u8 per playlist in <layout folder>/Playlists/<folder>/, with paths relative to that folder."""
     config = config_store.load_config()
     folders = config.get('playlist_folders') or {}
     default = config.get('default_folder') or ''
-    base_dir = root / PLAYLISTS_FOLDER
+    base_dir = root / layout_base(config) / PLAYLISTS_FOLDER
     base_dir.mkdir(parents=True, exist_ok=True)
     tracks = library['tracks']
     previous = library.get('playlists', {})
+    previous_dir = Path(library.get('playlists_dir') or root / PLAYLISTS_FOLDER)
     written, used = {}, set()
 
     for playlist_id, info in contents.items():
@@ -421,19 +560,21 @@ def write_playlists(root, contents, library):
             lines.append(f"#EXTINF:{record.get('duration', -1)},{', '.join(record.get('artists', []))} - {record.get('title', '')}")
             lines.append(rel)
         (base_dir / filename).write_text('\n'.join(lines) + '\n', encoding='utf-8')
-
-        old = previous.get(playlist_id)
-        if old and old != filename:
-            (base_dir / old).unlink(missing_ok=True)
         written[playlist_id] = filename
 
     for playlist_id, old in previous.items():
-        if playlist_id not in written and old not in written.values():
-            (base_dir / old).unlink(missing_ok=True)
-    for sub in base_dir.iterdir():
-        if sub.is_dir() and not any(f for f in sub.iterdir() if f.name != '.DS_Store'):
-            shutil.rmtree(sub, ignore_errors=True)
+        if previous_dir / old != base_dir / written.get(playlist_id, ''):
+            if previous_dir != base_dir or old not in written.values():
+                (previous_dir / old).unlink(missing_ok=True)
+    for directory in {base_dir, previous_dir}:
+        if directory.is_dir():
+            for sub in directory.iterdir():
+                if sub.is_dir() and not any(f for f in sub.iterdir() if f.name != '.DS_Store'):
+                    shutil.rmtree(sub, ignore_errors=True)
+    if previous_dir != base_dir and previous_dir.is_dir() and not any(f for f in previous_dir.iterdir() if f.name != '.DS_Store'):
+        shutil.rmtree(previous_dir, ignore_errors=True)
     library['playlists'] = written
+    library['playlists_dir'] = str(base_dir)
 
 
 # --- Summary for the app ---
@@ -442,16 +583,12 @@ def summary():
     config = config_store.load_config()
     library = load_library()
     plan = load_plan()
-    hidden = safe_name(config['non_liked']['folder'])
-    genre_folders = [safe_name(p['name']) for p in config['playlists']]
+    root = music_root(config)
 
-    folders = {name: 0 for name in genre_folders}
-    failed, removed = [], []
+    failed, removed, downloaded = [], [], 0
     for track_id, record in library['tracks'].items():
-        if record['folder'] == hidden:
-            continue  # Non-Liked Songs are only visible in the music folder
-        if record['status'] == 'ok' and record['folder'] in folders:
-            folders[record['folder']] += 1
+        if record['status'] == 'ok':
+            downloaded += 1
         elif record['status'] == 'failed':
             failed.append({'track_id': track_id, **record})
         elif record['status'] == 'removed':
@@ -459,20 +596,17 @@ def summary():
 
     pending = None
     if plan:
-        visible = lambda tid: plan['desired'].get(tid) != hidden
         pending = {
             'generated_at': plan['generated_at'],
-            'to_download': sum(1 for t in plan['to_download'] if visible(t)),
+            'to_download': len(plan['to_download']),
             'to_move': len(plan['to_move']),
             'to_remove': len(plan['to_remove']),
-            'pending_liked': plan['pending_liked'],
             'playlists': len(plan['playlists']),
+            'moves_folder': Path(library['root']) != root,
         }
     return {
-        'playlist_names': {pid: info['name'] for pid, info in (plan or {}).get('playlists', {}).items()},
-        'music_dir': str(music_root(config)),
-        'folders': [{'name': k, 'count': v} for k, v in folders.items()],
-        'downloaded': sum(folders.values()),
+        'music_dir': str(root / layout_base(config)),
+        'downloaded': downloaded,
         'failed': failed,
         'removed': removed,
         'playlists': len(library.get('playlists', {})),
@@ -537,7 +671,8 @@ def _pick_by_duration(candidates, duration, info):
     """The candidate whose duration is the closest, if close enough (or the only one when unknown)."""
     if not candidates:
         return None
-    if not duration:
+    if not duration or not any(info[c]['duration'] for c in candidates):
+        # Unknown duration (songs read from a file have none): only a single candidate is safe.
         return candidates[0] if len(candidates) == 1 else None
     gaps = sorted((abs(info[c]['duration'] - duration), c) for c in candidates)
     if gaps[0][0] > MAX_DURATION_GAP:
@@ -547,7 +682,7 @@ def _pick_by_duration(candidates, duration, info):
 
 
 def import_files(sp, progress=None, source='', mode='copy'):
-    """Put already downloaded files where the current Spotify playlists say they belong."""
+    """Put already downloaded files where the current playlists say they belong."""
     progress = progress or (lambda **kw: None)
     source = Path(os.path.expanduser(source))
     if not source.is_dir():
@@ -557,6 +692,8 @@ def import_files(sp, progress=None, source='', mode='copy'):
     config = config_store.load_config()
     root = music_root(config)
     library = load_library()
+    if Path(library['root']) != root:
+        raise ValueError('The music folder changed. Run Sync first, then import.')
     tracks = library['tracks']
 
     by_name = defaultdict(list)
@@ -619,6 +756,12 @@ def import_files(sp, progress=None, source='', mode='copy'):
     IMPORT_RESULT_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding='utf-8')
     progress(step='Done')
     return result
+
+
+def load_imported():
+    if IMPORTED_PATH.exists():
+        return json.loads(IMPORTED_PATH.read_text(encoding='utf-8'))
+    return None
 
 
 def load_import_result():

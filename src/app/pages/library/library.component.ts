@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent } from 'src/app/components/confirm-dialog/confirm-dialog.component';
 import { LibraryState, PlaylistService } from 'src/app/services/playlist.service';
+import { StatusService } from 'src/app/services/status.service';
 
 @Component({
   selector: 'app-library',
@@ -16,12 +17,17 @@ export class LibraryComponent implements OnInit, OnDestroy {
   unmatchedShown = 10;
   showUnmatched = false;
   appleMusicAuto = true;
+  fromFile = false;
   private poll: any = null;
 
-  constructor(private playlistService: PlaylistService, private dialog: MatDialog) { }
+  constructor(private playlistService: PlaylistService, private dialog: MatDialog, private statusService: StatusService) { }
 
   ngOnInit(): void {
     this.refresh();
+    this.statusService.status$.subscribe(status => {
+      this.fromFile = status?.import.source === 'tunemymusic' || status?.import.source === 'spotify-export';
+    });
+    this.statusService.refresh();
     this.playlistService.getConfig().subscribe(config => this.appleMusicAuto = config.apple_music_auto);
   }
 
@@ -56,8 +62,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   sync(): void {
     const plan = this.state?.plan;
+    const moves = plan?.moves_folder ? ` Your files are moved to ${this.state?.music_dir}.` : '';
     const message = plan
-      ? `${plan.to_download} songs to download, ${plan.to_move} to move, ${plan.to_remove} removed. Playlists are rewritten in the Playlists folder.`
+      ? `${plan.to_download} songs to download, ${plan.to_move} to move, ${plan.to_remove} removed. Playlists are rewritten in the Playlists folder.${moves}`
       : 'Downloads new songs, moves changed ones and rewrites the playlists.';
     this.dialog.open(ConfirmDialogComponent, {
       data: { title: 'Sync library?', message, confirmLabel: 'Sync' },

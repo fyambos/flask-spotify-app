@@ -13,7 +13,7 @@
     <div class="flex items-start justify-between gap-6 px-6 py-5">
       <div>
         <div class="text-sm font-medium">Several playlists per song</div>
-        <p class="mt-0.5 text-sm text-zinc-500">Also add a song to every playlist whose album or title keywords match (e.g. a drama soundtrack in Drama and in its style playlist). Downloads use the first one.</p>
+        <p class="mt-0.5 text-sm text-zinc-500">Also add a song to every playlist whose album or title keywords match (e.g. a drama soundtrack in Drama and in its style playlist).</p>
       </div>
       <button type="button" role="switch" [attr.aria-checked]="config.multi_playlist"
               (click)="config.multi_playlist = !config.multi_playlist; saveSettings()"
@@ -55,7 +55,7 @@
     <div class="grid gap-4 px-6 py-5 sm:grid-cols-3">
       <div class="sm:col-span-2">
         <label class="mb-1.5 block text-sm font-medium">Music folder</label>
-        <input class="input" [(ngModel)]="config.music_dir" (change)="saveSettings()" placeholder="~/Music/Spotify" />
+        <input class="input" [(ngModel)]="config.music_dir" (change)="saveSettings()" placeholder="~/Music" />
       </div>
       <div>
         <label class="mb-1.5 block text-sm font-medium">Format</label>
@@ -66,7 +66,10 @@
       </div>
     </div>
     <div class="px-6 py-5">
-      <div class="text-sm font-medium">Playlists to download</div>
+      <div class="flex items-center gap-2 text-sm font-medium">
+        Playlists to download
+        <span *ngIf="newCount" class="chip bg-brand-50 text-brand-700">{{ newCount }} new</span>
+      </div>
       <div class="mt-3 inline-flex rounded-full bg-zinc-100 p-1 text-sm">
         <button *ngFor="let m of downloadModes" type="button" (click)="setMode(m.id)"
                 class="rounded-full px-3.5 py-1.5 font-medium transition"
@@ -75,28 +78,70 @@
         </button>
       </div>
       <p class="mt-2 text-sm text-zinc-500">{{ modeHint }}</p>
+      <p *ngIf="config.download.mode === 'all' && fromFile" class="mt-1 text-sm text-zinc-500">Playlists from other users are included. Choose playlists to remove them.</p>
 
       <div *ngIf="config.download.mode === 'selected'" class="mt-4 rounded-xl ring-1 ring-zinc-200">
         <div class="border-b border-zinc-100 p-2">
           <input class="input rounded-lg py-1.5 ring-0" [(ngModel)]="downloadSearch" placeholder="Find a playlist" />
         </div>
-        <label *ngFor="let c of visibleChoices" class="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-zinc-50"
-               [class.cursor-default]="c.genre">
-          <input type="checkbox" class="h-4 w-4 rounded accent-zinc-900" [checked]="c.genre || isChosen(c.id)"
-                 [disabled]="c.genre" (change)="toggleChoice(c.id)" />
-          <span class="flex-1 truncate">{{ c.name }}</span>
-          <span *ngIf="c.genre" class="text-xs text-zinc-400">genre playlist</span>
+        <label *ngFor="let c of visibleChoices; trackBy: trackById" class="flex cursor-pointer items-start gap-3 px-3 py-2 text-sm hover:bg-zinc-50">
+          <input type="checkbox" class="mt-0.5 h-4 w-4 rounded accent-zinc-900" [checked]="isChosen(c.id)" (change)="toggleChoice(c.id)" />
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-2">
+              <span class="truncate">{{ c.name }}</span>
+              <span *ngIf="c.new" class="chip bg-brand-50 text-brand-700">New</span>
+              <span *ngIf="c.owned === false" class="chip">From another user</span>
+            </span>
+            <span *ngIf="c.maybe_incomplete" class="mt-0.5 block text-xs text-amber-600">May be incomplete. TuneMyMusic exports 500 songs max from playlists of other users.</span>
+          </span>
+          <span class="shrink-0 text-xs tabular-nums text-zinc-400">{{ c.track_count }}</span>
         </label>
         <button *ngIf="!downloadSearch && downloadChoices.length > downloadShown" type="button"
                 class="btn-ghost m-1 px-2 py-0.5 text-xs" (click)="downloadShown = downloadShown + 20">
           Show {{ downloadChoices.length - downloadShown < 20 ? downloadChoices.length - downloadShown : 20 }} more
         </button>
       </div>
-
-      <div *ngIf="config.download.mode !== 'liked'" class="mt-4 max-w-sm">
-        <label class="mb-1.5 block text-sm font-medium">Folder for songs not in your Liked Songs</label>
-        <input class="input" [(ngModel)]="config.non_liked.folder" (change)="saveSettings()" placeholder="Non-Liked Songs" />
+    </div>
+    <div class="px-6 py-5">
+      <div class="text-sm font-medium">File layout</div>
+      <p class="mt-0.5 text-sm text-zinc-500">Where each song is saved. One file per song, even when it is in several playlists. Files are moved at the next Sync, never downloaded again.</p>
+      <div class="mt-4 max-w-xs">
+        <label class="mb-1.5 block text-sm font-medium">Folder name</label>
+        <input class="input" [(ngModel)]="config.layout.folder" (change)="saveSettings()" placeholder="Music Sorter" />
       </div>
+      <div class="mt-4 grid gap-2 sm:grid-cols-2">
+        <button *ngFor="let l of layouts" type="button" (click)="setLayout(l.id)"
+                class="rounded-xl p-4 text-left ring-1 transition"
+                [ngClass]="config.layout.preset === l.id ? 'bg-zinc-900 text-white ring-zinc-900' : 'bg-white ring-zinc-200 hover:ring-zinc-400'">
+          <div class="text-sm font-medium">{{ l.label }}</div>
+          <div class="mt-1 break-all font-mono text-xs" [ngClass]="config.layout.preset === l.id ? 'text-zinc-300' : 'text-zinc-500'">{{ examplePath(l.id) }}</div>
+        </button>
+      </div>
+      <div *ngIf="config.layout.preset === 'first_playlist'" class="mt-4">
+        <div class="text-sm font-medium">Playlist order</div>
+        <p class="mt-0.5 text-sm text-zinc-500">A song in several playlists goes to the folder of the first one. Drag to change the order.</p>
+        <div cdkDropList (cdkDropListDropped)="dropOrder($event)" class="mt-3 max-w-md rounded-xl ring-1 ring-zinc-200">
+          <div *ngFor="let p of layoutOrder; let i = index; trackBy: trackById" cdkDrag
+               class="flex cursor-grab items-center gap-3 border-b border-zinc-100 bg-white px-3 py-2 text-sm last:border-0">
+            <span class="inline-flex text-zinc-300"><lucide-icon name="grip-vertical" [size]="16"></lucide-icon></span>
+            <span class="w-5 text-xs tabular-nums text-zinc-400">{{ i + 1 }}</span>
+            <span class="truncate">{{ p.name }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div *ngIf="fromFile" class="flex items-start justify-between gap-6 px-6 py-5">
+      <div>
+        <div class="text-sm font-medium">Import reminder</div>
+        <p class="mt-0.5 text-sm text-zinc-500">Show a reminder when the last import is more than 7 days old.</p>
+      </div>
+      <button type="button" role="switch" [attr.aria-checked]="config.import_reminder"
+              (click)="config.import_reminder = !config.import_reminder; saveSettings()"
+              class="relative mt-0.5 inline-flex h-6 w-11 shrink-0 rounded-full transition"
+              [ngClass]="config.import_reminder ? 'bg-brand-500' : 'bg-zinc-200'">
+        <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-soft transition-all"
+              [ngClass]="config.import_reminder ? 'left-[1.375rem]' : 'left-0.5'"></span>
+      </button>
     </div>
     <div class="px-6 py-5">
       <div class="text-sm font-medium">YouTube Music Premium</div>
@@ -105,7 +150,7 @@
     </div>
     <div class="px-6 py-5">
       <div class="text-sm font-medium">Removed songs</div>
-      <p class="mt-0.5 text-sm text-zinc-500">Downloaded songs that are no longer in any synced playlist.</p>
+      <p class="mt-0.5 text-sm text-zinc-500">Downloaded songs that are no longer in any downloaded playlist.</p>
       <div class="mt-4 grid gap-4 sm:grid-cols-2">
         <select class="input" [(ngModel)]="config.removed.mode" (change)="saveSettings()">
           <option value="keep">Keep, shown as removed in the app</option>
@@ -135,23 +180,6 @@
     <p *ngIf="!rememberedArtists.length" class="px-6 py-5 text-sm text-zinc-400">None yet.</p>
   </section>
 
-  <section class="card divide-y divide-zinc-100">
-    <div class="px-6 py-5">
-      <h2 class="font-semibold">Sort another playlist</h2>
-      <p class="mt-0.5 text-sm text-zinc-500">Move songs from a non-tracked playlist to one of your tracked playlists, with the same rules.</p>
-    </div>
-    <div class="flex flex-wrap items-center gap-3 px-6 py-5">
-      <select class="input max-w-xs" [(ngModel)]="sortSource">
-        <option value="" disabled>Choose a playlist</option>
-        <option *ngFor="let p of playlists" [value]="p.id">{{ p.name.trim() }}</option>
-      </select>
-      <button class="btn-primary" [disabled]="!sortSource || sorting" (click)="sortPlaylist()">
-        <span class="inline-flex animate-spin"><lucide-icon *ngIf="sorting" name="loader-2" [size]="16"></lucide-icon></span>
-        {{ sorting ? 'Sorting…' : 'Sort' }}
-      </button>
-      <span *ngIf="sortMessage" class="text-sm text-zinc-500">{{ sortMessage }}</span>
-    </div>
-  </section>
 </div>
 
 <div *ngIf="savedAt" class="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900 px-4 py-2 text-sm text-white shadow-lift">

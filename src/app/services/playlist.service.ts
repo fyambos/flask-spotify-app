@@ -6,7 +6,8 @@ import { API_URL } from './api';
 export interface GenrePlaylist {
   id: string;
   name: string;
-  playlist_id: string;
+  /** null: a playlist that only exists in the app until the next Spotify sync. */
+  playlist_id: string | null;
   genre_names: string[];
   exclude_genres: string[];
   album_keywords: string[];
@@ -19,8 +20,10 @@ export interface AppConfig {
   fallback_genre: string;
   artist_history: { enabled: boolean; min_share: number };
   multi_playlist: boolean;
-  non_liked: { folder: string };
-  download: { mode: 'all' | 'liked' | 'selected'; playlists: string[] };
+  download: { mode: 'all' | 'selected'; playlists: string[]; seen: string[] };
+  layout: { preset: LayoutPreset; folder: string; order: string[] };
+  sort_from: string[];
+  import_reminder: boolean;
   removed: { mode: 'keep' | 'move' | 'delete'; folder: string };
   youtube_cookies: string;
   apple_music_auto: boolean;
@@ -30,6 +33,17 @@ export interface AppConfig {
   artist_rules: { [artistId: string]: { name: string; playlist: string } };
   playlists: GenrePlaylist[];
 }
+
+export interface LayoutExample {
+  album_artist: string;
+  album: string;
+  file: string;
+  first_playlist: string | null;
+  separator: string;
+  music_dir: string;
+}
+
+export type LayoutPreset = 'artist_album' | 'artist' | 'one_folder' | 'first_playlist';
 
 export interface LikeItem {
   track_id: string;
@@ -51,7 +65,35 @@ export interface SpotifyPlaylist {
   name: string;
   image_url: string | null;
   track_count: number;
-  owned: boolean;
+  /** false: playlist of another user. null: unknown (imported from a file). */
+  owned: boolean | null;
+  maybe_incomplete: boolean;
+  new: boolean;
+  app_only: boolean;
+}
+
+export interface ImportStatus {
+  source: 'spotify' | 'tunemymusic' | 'spotify-export' | null;
+  file: string | null;
+  updated_at: string | null;
+  days: number | null;
+  reminder: boolean;
+  watching: boolean;
+}
+
+export interface ImportState {
+  job: JobState;
+  status: ImportStatus;
+  result: { kind: string; file: string; songs: number; playlists: number; songs_added: number; songs_removed: number; playlists_added: string[] } | null;
+  watch: { last: string | null; error: string | null };
+}
+
+export interface SpotifySyncChange {
+  entry_id: string;
+  name: string;
+  create: boolean;
+  to_add: string[];
+  removed_on_spotify: string[];
 }
 
 export type SuggestionType = 'add_genre' | 'exclude_genre' | 'album_keyword' | 'title_keyword' | 'move_above' | 'multi_playlist' | 'artist';
@@ -93,6 +135,10 @@ export interface SetupStatus {
   lastfm: boolean;
   ffmpeg: boolean;
   configured: boolean;
+  /** Playlists known to the app (from Spotify or an imported file). */
+  playlists: boolean;
+  import: ImportStatus;
+  sort: { pending: number; waiting: boolean };
 }
 
 export interface JobState {
@@ -141,21 +187,19 @@ export interface ImportResult {
 
 export interface LibraryState {
   job: JobState;
-  playlist_names: { [id: string]: string };
   import: ImportResult | null;
   apple_music: { available: boolean; job: JobState };
   music_dir: string;
-  folders: { name: string; count: number }[];
   downloaded: number;
   failed: LibraryTrack[];
   removed: LibraryTrack[];
   playlists: number;
-  plan: { generated_at: string; to_download: number; to_move: number; to_remove: number; pending_liked: number; playlists: number } | null;
+  plan: { generated_at: string; to_download: number; to_move: number; to_remove: number; playlists: number; moves_folder: boolean } | null;
 }
 
 export interface LikesState {
   job: JobState;
-  preview: { generated_at: string; items: LikeItem[] } | null;
+  preview: { generated_at: string; items: LikeItem[]; sources?: string[]; both?: string[] } | null;
 }
 
 @Injectable({
@@ -167,9 +211,6 @@ export class PlaylistService {
 
   constructor(private http: HttpClient) { }
 
-  sortPlaylist(playlistId: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/sort-playlist`, { playlist_id: playlistId });
-  }
   getPlaylists(): Observable<SpotifyPlaylist[]> {
     return this.http.get<SpotifyPlaylist[]>(`${this.apiUrl}/get-playlists`);
   }
@@ -246,6 +287,9 @@ export class PlaylistService {
   updateAppleMusic(): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/library/apple-music`, {});
   }
+  getLayoutExample(): Observable<LayoutExample> {
+    return this.http.get<LayoutExample>(`${this.apiUrl}/library/example`);
+  }
   revealLibrary(): Observable<void> {
     return this.http.post<void>(`${this.apiUrl}/library/reveal`, {});
   }
@@ -259,7 +303,30 @@ export class PlaylistService {
   resolveLike(trackId: string, playlist: string, rememberArtist: boolean): Observable<LikeItem> {
     return this.http.post<LikeItem>(`${this.apiUrl}/likes/review/${trackId}`, { playlist, remember_artist: rememberArtist });
   }
-  applyLikes(): Observable<{ added: { [genre: string]: number } }> {
-    return this.http.post<{ added: { [genre: string]: number } }>(`${this.apiUrl}/likes/apply`, {});
+  applyLikes(): Observable<{ added: { [genre: string]: number }; spotify: 'written' | 'review' | 'offline' }> {
+    return this.http.post<{ added: { [genre: string]: number }; spotify: 'written' | 'review' | 'offline' }>(`${this.apiUrl}/likes/apply`, {});
+  }
+
+  markPlaylistsSeen(ids: string[]): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/download/seen`, { ids });
+  }
+
+  getImport(): Observable<ImportState> {
+    return this.http.get<ImportState>(`${this.apiUrl}/import`);
+  }
+  watchDownloads(): Observable<{ watching: boolean; folder: string }> {
+    return this.http.post<{ watching: boolean; folder: string }>(`${this.apiUrl}/import/watch`, {});
+  }
+  uploadPlaylistsFile(file: File): Observable<any> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<any>(`${this.apiUrl}/import/file`, form);
+  }
+
+  getSpotifySync(): Observable<{ available: boolean; changes: SpotifySyncChange[]; job: JobState }> {
+    return this.http.get<{ available: boolean; changes: SpotifySyncChange[]; job: JobState }>(`${this.apiUrl}/sort/spotify`);
+  }
+  runSpotifySync(): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/sort/spotify`, {});
   }
 }

@@ -21,7 +21,8 @@ import config_store
 from config_store import DATA_DIR
 from genres import GenreResolver, matches_any
 from sorter import Classifier
-from spotify_client import playlist_tracks
+import catalog as catalog_store
+import sort_state
 
 PROPOSAL_PATH = DATA_DIR / 'setup-proposal.json'
 ACCURACY_PATH = DATA_DIR / 'accuracy.json'
@@ -185,18 +186,23 @@ def analyse(sp, progress=None, playlists=(), multi_playlist=None):
     progress = progress or (lambda **kw: None)
     resolver = GenreResolver(sp)
     current = {p['playlist_id']: p for p in config_store.load_config()['playlists']}
+    catalog = _catalog(sp, progress)
 
     data = []
     for i, p in enumerate(playlists, 1):
         progress(step=f"Reading {p['name']}", done=i - 1, total=len(playlists))
-        tracks = playlist_tracks(sp, p['playlist_id'])
+        tracks = catalog_store.tracks_of(catalog, p['playlist_id'])
         genres = []
         for j, track in enumerate(tracks, 1):
             genres.append(resolver.track_genres(track))
             if j % 25 == 0:
                 progress(step=f"Looking up genres in {p['name']} ({j}/{len(tracks)})")
-        entry_id = current.get(p['playlist_id'], {}).get('id') or config_store._new_id()
-        data.append({'id': entry_id, 'name': p['name'], 'playlist_id': p['playlist_id'],
+        playlist_id = p['playlist_id']
+        if playlist_id.startswith(sort_state.APP_PREFIX):  # a playlist only in the app: keep its entry
+            entry_id, playlist_id = playlist_id[len(sort_state.APP_PREFIX):], None
+        else:
+            entry_id = current.get(playlist_id, {}).get('id') or config_store._new_id()
+        data.append({'id': entry_id, 'name': p['name'], 'playlist_id': playlist_id,
                      'tracks': tracks, 'genres': genres})
     resolver.save()
 
@@ -501,11 +507,17 @@ def rules_hash(playlists, multi_playlist=False):
     return hashlib.sha1(json.dumps(rules).encode()).hexdigest()[:12]
 
 
+def _catalog(sp, progress):
+    import library
+    return library.current_catalog(sp, progress)
+
+
 def _read_playlists(sp, playlists, resolver, progress):
+    catalog = _catalog(sp, progress)
     data = []
     for i, p in enumerate(playlists, 1):
         progress(step=f"Reading {p['name']}", done=i - 1, total=len(playlists))
-        tracks = playlist_tracks(sp, p['playlist_id'])
+        tracks = catalog_store.tracks_of(catalog, sort_state.playlist_key(p))
         data.append({'id': p['id'], 'name': p['name'], 'playlist_id': p['playlist_id'], 'tracks': tracks,
                      'genres': [resolver.track_genres(t) for t in tracks]})
     resolver.save()

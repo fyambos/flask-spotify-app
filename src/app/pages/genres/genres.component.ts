@@ -17,6 +17,8 @@ export class GenresComponent implements OnInit, OnDestroy {
   applied = new Set<string>();
   artistRules: { [id: string]: { name: string; playlist: string } } = {};
   multiPlaylist = false;
+  creating = false;
+  newName = '';
   private poll: any = null;
 
   constructor(private playlistService: PlaylistService, private dialog: MatDialog) { }
@@ -104,11 +106,22 @@ export class GenresComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** A "sort into" playlist that only exists in the app until the next Spotify sync. */
+  create(): void {
+    const name = this.newName.trim();
+    if (!name) return;
+    this.playlistService.addGenrePlaylist({ name, playlist_id: null, genre_names: [] }).subscribe(entry => {
+      this.playlists = [...this.playlists, entry];
+      this.creating = false;
+      this.editing = entry;
+    });
+  }
+
   remove(playlist: GenrePlaylist): void {
     this.dialog.open(ConfirmDialogComponent, {
       data: {
         title: `Remove ${playlist.name}?`,
-        message: 'Liked songs will no longer be filed into this playlist. The Spotify playlist itself is not deleted.',
+        message: 'Songs will no longer be sorted into this playlist. The Spotify playlist itself is not deleted.',
         confirmLabel: 'Remove',
         danger: true,
       },

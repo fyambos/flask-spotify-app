@@ -7,6 +7,9 @@
     </p>
   </div>
   <div class="flex items-center gap-2">
+    <a *ngIf="fromFile" routerLink="/import" class="btn-outline">
+      <lucide-icon name="download" [size]="15"></lucide-icon> Import playlists
+    </a>
     <button class="btn-outline" (click)="check()" [disabled]="state?.job?.running">
       <lucide-icon name="refresh-cw" [size]="15"></lucide-icon> Check
     </button>
@@ -56,7 +59,6 @@
 </div>
 <p *ngIf="state?.plan as plan" class="mt-2 text-xs text-zinc-400">
   Checked {{ plan.generated_at | date:'d MMM, HH:mm' }}.
-  <ng-container *ngIf="plan.pending_liked">{{ plan.pending_liked }} liked songs are not sorted yet. They are downloaded once sorted.</ng-container>
 </p>
 <div *ngIf="state && !state.plan && !state.job.running" class="card mt-6 p-5 text-sm text-zinc-500">
   <div class="font-medium text-zinc-900">Nothing downloaded yet</div>
@@ -67,7 +69,7 @@
 <section *ngIf="state" class="card mt-8 p-6">
   <h2 class="font-semibold">Import existing files</h2>
   <p class="mt-0.5 text-sm text-zinc-500">
-    Songs you already downloaded are matched to your Spotify songs and moved to the folder of their current playlist. They are not downloaded again.
+    Songs you already downloaded are matched to the songs of your playlists and moved to their folder (Settings, File layout). They are not downloaded again.
   </p>
   <div class="mt-4 flex flex-wrap items-center gap-3">
     <input class="input min-w-[16rem] flex-1" [(ngModel)]="importPath" placeholder="Folder with your music files" />
@@ -107,12 +109,6 @@
 <section *ngIf="state" class="mt-8">
   <h2 class="font-semibold">Downloaded</h2>
   <p class="mt-0.5 text-sm text-zinc-500">{{ state.downloaded }} songs, {{ state.playlists }} playlists.</p>
-  <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-    <div *ngFor="let f of state.folders" class="card flex items-center justify-between px-4 py-3">
-      <span class="truncate text-sm font-medium">{{ f.name }}</span>
-      <span class="text-sm tabular-nums text-zinc-400">{{ f.count }}</span>
-    </div>
-  </div>
 </section>
 
 <!-- Failed / removed -->
@@ -173,7 +169,13 @@
     </div>
     <div class="card p-5 text-sm text-zinc-600">
       <div class="font-medium text-zinc-900">Android</div>
-      <p class="mt-2">Copy the music folder to the phone, or keep it in sync with Syncthing. Poweramp, Samsung Music and VLC read the playlists.</p>
+      <p class="mt-2">Set up once:</p>
+      <ol class="mt-1 list-decimal space-y-1 pl-4">
+        <li>Install Syncthing on the computer (<a href="https://syncthing.net/downloads/" target="_blank" rel="noopener" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2">syncthing.net</a>) and on the phone.</li>
+        <li>Pair them, then share the folder <span class="break-all font-medium text-zinc-700">{{ state?.music_dir }}</span>.</li>
+        <li>In Poweramp, add the folder. It reads the playlists.</li>
+      </ol>
+      <p class="mt-2">New songs arrive by themselves when the phone is on the same Wi-Fi.</p>
     </div>
     <div class="card p-5 text-sm text-zinc-600">
       <div class="font-medium text-zinc-900">Windows</div>

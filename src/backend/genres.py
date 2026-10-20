@@ -26,6 +26,14 @@ LASTFM_NOISE = {
 }
 
 
+NAME_PREFIX = 'name:'
+
+
+def artist_key(artist):
+    """The Spotify id of an artist, or 'name:<name>' for artists read from a file."""
+    return artist.get('id') or NAME_PREFIX + re.sub(r'\s+', ' ', (artist.get('name') or '').strip().lower())
+
+
 class GenreResolver:
     def __init__(self, sp, lastfm_api_key=None, min_tag_count=10, max_tags=10):
         self.sp = sp
@@ -34,6 +42,7 @@ class GenreResolver:
         self.max_tags = max_tags
         self.cache = json.loads(CACHE_PATH.read_text(encoding='utf-8')) if CACHE_PATH.exists() else {}
         self._dirty = 0
+        self._spotify_failed = False
 
     def artist_genres(self, artist_id, artist_name):
         """Return the cache entry {'name', 'spotify': [...], 'lastfm': [...], 'genres': [...]}."""
@@ -41,13 +50,19 @@ class GenreResolver:
         if entry is not None and 'spotify' not in entry:
             entry = self._upgrade(entry)
 
-        if entry is None:
-            spotify = [g.lower() for g in (self.sp.artist(artist_id).get('genres') or [])]
-            entry = {'name': artist_name, 'spotify': spotify}
+        if entry is None or entry.get('spotify') is None:
+            # Artists read from a file have no Spotify id, and without Spotify there are only Last.fm genres.
+            spotify = None
+            if not artist_id.startswith(NAME_PREFIX) and self._spotify_usable():
+                try:
+                    spotify = [g.lower() for g in (self.sp.artist(artist_id).get('genres') or [])]
+                except Exception:
+                    self._spotify_failed = True
+            entry = {**(entry or {}), 'name': artist_name, 'spotify': spotify}
         if 'lastfm' not in entry and self.lastfm_api_key:
             entry['lastfm'] = self._lastfm_tags(artist_name)
 
-        entry['genres'] = list(dict.fromkeys(entry['spotify'] + entry.get('lastfm', [])))
+        entry['genres'] = list(dict.fromkeys((entry['spotify'] or []) + entry.get('lastfm', [])))
         if self.cache.get(artist_id) != entry:
             self.cache[artist_id] = entry
             self._dirty += 1
@@ -62,13 +77,17 @@ class GenreResolver:
             return {'name': old['name'], 'spotify': old['genres']}
         return {'name': old['name'], 'spotify': [], 'lastfm': old['genres']}
 
+    def _spotify_usable(self):
+        from spotify_client import blocked, keys_present, logged_in
+        return not self._spotify_failed and keys_present() and logged_in() and not blocked()
+
     def track_genres(self, track):
         """Union of the genres of all the track's artists."""
         genres = []
         for artist in track.get('artists', []):
-            if not artist.get('id'):
+            if not artist.get('name') and not artist.get('id'):
                 continue
-            for g in self.artist_genres(artist['id'], artist['name'])['genres']:
+            for g in self.artist_genres(artist_key(artist), artist['name'])['genres']:
                 if g not in genres:
                     genres.append(g)
         return genres

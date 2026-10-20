@@ -27,7 +27,6 @@ export class SetupComponent implements OnInit, OnDestroy {
   selected = new Set<string>();
   private initiallySelected = new Set<string>();
   search = '';
-  showFollowed = false;
   reconfiguring = false;
 
   job: JobState | null = null;
@@ -48,7 +47,11 @@ export class SetupComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadStatus();
     this.playlistService.getConfig().subscribe(config => {
-      config.playlists.forEach(p => { this.selected.add(p.playlist_id); this.initiallySelected.add(p.playlist_id); });
+      config.playlists.forEach(p => {
+        const id = p.playlist_id || 'app:' + p.id;
+        this.selected.add(id);
+        this.initiallySelected.add(id);
+      });
       this.fallbackGenre = config.fallback_genre;
       this.multiPlaylist = config.multi_playlist;
       this.artistRules = config.artist_rules;
@@ -78,6 +81,9 @@ export class SetupComponent implements OnInit, OnDestroy {
         if (status.spotify.connected) {
           clearInterval(this.loginPoll);
           this.loginPoll = null;
+        }
+        // Sorting setup (from Sort Playlists): needs playlists, from Spotify or an imported file.
+        if (status.spotify.connected || status.playlists) {
           if (!this.playlists.length) this.loadPlaylists();
           if (this.route.snapshot.queryParamMap.get('step') === 'choose') {
             this.step = 'choose';
@@ -111,7 +117,8 @@ export class SetupComponent implements OnInit, OnDestroy {
     const search = this.search.trim().toLowerCase();
     return this.playlists
       .filter(p =>
-        (this.showFollowed || p.owned || this.selected.has(p.id))
+        // Spotify doesn't let the app add songs to playlists of other users.
+        (p.owned !== false && p.id !== 'liked' || this.selected.has(p.id))
         && (!search || p.name.toLowerCase().includes(search)))
       // Playlists already configured first (stable while you click).
       .sort((a, b) => Number(this.initiallySelected.has(b.id)) - Number(this.initiallySelected.has(a.id)));
@@ -228,7 +235,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   finish(): void {
     this.saving = true;
     this.playlistService.applySetup(this.proposal, this.fallbackGenre, this.multiPlaylist).subscribe({
-      next: () => window.location.assign('/likes'),
+      next: () => window.location.assign('/sort'),
       error: () => this.saving = false,
     });
   }

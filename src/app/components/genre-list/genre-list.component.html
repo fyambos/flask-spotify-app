@@ -6,7 +6,7 @@
     </button>
 
     <div class="relative shrink-0">
-      <img *ngIf="spotify[p.playlist_id]?.image_url; else noCover" [src]="spotify[p.playlist_id].image_url" alt=""
+      <img *ngIf="spotify[p.playlist_id || '']?.image_url; else noCover" [src]="spotify[p.playlist_id || ''].image_url" alt=""
            class="h-12 w-12 rounded-xl object-cover ring-1 ring-zinc-900/5" />
       <ng-template #noCover>
         <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-100 text-zinc-400">
@@ -21,7 +21,8 @@
     <div class="min-w-0 flex-1">
       <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span class="font-medium text-zinc-900">{{ p.name }}</span>
-        <span *ngIf="spotify[p.playlist_id] as sp" class="text-xs text-zinc-400">
+        <span *ngIf="!p.playlist_id" class="chip">Only in the app</span>
+        <span *ngIf="spotify[p.playlist_id || ''] as sp" class="text-xs text-zinc-400">
           <ng-container *ngIf="sp.name !== p.name">{{ sp.name }} · </ng-container>{{ sp.track_count }} tracks
         </span>
         <span *ngIf="stats?.[p.id] as s"

@@ -1,7 +1,9 @@
-"""Sort liked tracks into the genre playlists, following the rules in data/config.json.
+"""Sort the songs of the "sort from" playlists (Liked Songs by default) into the "sort into"
+playlists, following the rules in data/config.json.
 
-For each liked track, in this order:
-1. already in one of the genre playlists -> left as is
+For each song, in this order:
+1. already in one of the "sort into" playlists -> left as is
+   (removed from one by hand on Spotify -> review list, it is not sorted there again)
 2. a choice remembered for its artist (artist_rules)
 3. album / title keywords of a genre, in priority order
 4. artist history: the genre playlist holding most of the tracks of its artists
@@ -10,8 +12,9 @@ For each liked track, in this order:
    match, the one whose tracks have the most similar genres wins (priority breaks ties)
 6. otherwise -> review list, where you pick the genre yourself (with a suggestion)
 
-Liked Songs are never modified. The preview is saved in data/likes-preview.json and
-nothing is added to Spotify until it is applied.
+The "sort from" playlists are never modified. The preview is saved in data/likes-preview.json.
+Applying it records the sorted songs in the app (sort_state) and writes them on Spotify
+when it can; otherwise they wait for the "Sync with Spotify" screen.
 """
 import json
 import re
@@ -21,8 +24,9 @@ from datetime import datetime
 
 import config_store
 from config_store import DATA_DIR
-from genres import GenreResolver, matches_any, matching_playlists
-from spotify_client import add_to_playlist, liked_tracks, playlist_tracks
+import catalog as catalog_store
+import sort_state
+from genres import GenreResolver, artist_key, matches_any, matching_playlists
 
 PREVIEW_PATH = DATA_DIR / 'likes-preview.json'
 FEATURED_WEIGHT = 0.5      # a featured artist counts half in the artist history
@@ -37,8 +41,9 @@ def _norm(name):
 
 
 class Classifier:
-    def __init__(self, sp, config, resolver, progress=None):
+    def __init__(self, sp, config, resolver, progress=None, catalog=None):
         self.sp = sp
+        self.catalog = catalog
         self.config = config
         self.playlists = config['playlists']
         self.by_id = {p['id']: p for p in self.playlists}
@@ -50,11 +55,16 @@ class Classifier:
         self.playlist_sizes = Counter()
         self.genre_totals = Counter()
         self.progress = progress or (lambda **kw: None)
+        self.removed_by_hand = {}
 
     def build_index(self):
+        """Index the songs of the "sort into" playlists, as the app sees them (catalog + sorted in the app)."""
+        if self.catalog is None:
+            self.catalog = sort_state.catalog_view()
+        self.removed_by_hand = sort_state.removed_by_hand()
         for i, entry in enumerate(self.playlists, 1):
-            self.progress(step=f"Reading genre playlist {entry['name']} ({i}/{len(self.playlists)})")
-            for track in playlist_tracks(self.sp, entry['playlist_id']):
+            self.progress(step=f"Reading {entry['name']} ({i}/{len(self.playlists)})")
+            for track in catalog_store.tracks_of(self.catalog, sort_state.playlist_key(entry)):
                 self.add_track(entry['id'], track)
 
     def add_track(self, entry_id, track, sign=1):
@@ -62,15 +72,22 @@ class Classifier:
         if sign > 0:
             self.track_index.setdefault(track['id'], entry_id)
         for position, artist in enumerate(track['artists']):
-            if not artist.get('id'):
+            if not artist.get('name'):
                 continue
-            self.artist_counts[artist['id']][entry_id] += sign * (1 if position == 0 else FEATURED_WEIGHT)
-            self.artist_ids_by_name[_norm(artist['name'])].add(artist['id'])
+            key = artist_key(artist)
+            self.artist_counts[key][entry_id] += sign * (1 if position == 0 else FEATURED_WEIGHT)
+            self.artist_ids_by_name[_norm(artist['name'])].add(key)
         track_genres = set(self.resolver.track_genres(track))
         for genre in track_genres:
             self.genre_profile[entry_id][genre] += sign
             self.genre_totals[genre] += sign
         self.playlist_sizes[entry_id] += sign
+
+    def _rules_by_name(self):
+        """Remembered artists by name, for songs read from a file (no artist id)."""
+        if not hasattr(self, '_rule_names'):
+            self._rule_names = {_norm(r['name']): r for r in self.config['artist_rules'].values() if r.get('name')}
+        return self._rule_names
 
     def _related_artist_ids(self, name):
         """Indexed artists that are a variant of this name: "Selena Gomez" <-> "Selena Gomez & The Scene"."""
@@ -97,7 +114,7 @@ class Classifier:
         counts, sources = Counter(), []
         for position, artist in enumerate(track['artists']):
             weight = 1 if position == 0 else FEATURED_WEIGHT
-            ids = {artist.get('id')} | self._related_artist_ids(artist['name'])
+            ids = {artist_key(artist)} | self._related_artist_ids(artist['name'])
             for artist_id in ids:
                 for entry_id, n in self.artist_counts.get(artist_id, {}).items():
                     if n > 0 and entry_id not in excluded:
@@ -141,7 +158,7 @@ class Classifier:
             'track_id': track['id'],
             'name': track['name'],
             'artists': [a['name'] for a in track['artists']],
-            'artist_id': artist.get('id'),
+            'artist_id': artist_key(artist),
             'album': album,
             'image_url': ((track.get('album') or {}).get('images') or [{}])[-1].get('url'),
             'genres': [],
@@ -154,9 +171,13 @@ class Classifier:
 
         if not evaluating and track['id'] in self.track_index:
             return {**result, 'playlist': self.track_index[track['id']], 'status': 'already',
-                    'reason': 'already in a genre playlist'}
+                    'reason': 'already sorted'}
+        if not evaluating and track['id'] in self.removed_by_hand:
+            names = [self.by_id[e]['name'] for e in self.removed_by_hand[track['id']] if e in self.by_id]
+            return {**result, 'reason': f"removed by hand from {', '.join(names)}"}
 
-        rule = self.config['artist_rules'].get(artist.get('id'))
+        rules = self.config['artist_rules']
+        rule = rules.get(artist_key(artist)) or self._rules_by_name().get(_norm(artist.get('name') or ''))
         if rule and rule['playlist'] in self.by_id:
             return {**result, 'playlist': rule['playlist'], 'status': 'auto', 'reason': 'remembered artist choice'}
 
@@ -222,22 +243,32 @@ def save_preview(preview):
 
 
 def build_preview(sp, progress=None):
+    import library
     progress = progress or (lambda **kw: None)
     config = config_store.load_config()
+    catalog = library.current_catalog(sp, progress)
     resolver = GenreResolver(sp)
-    classifier = Classifier(sp, config, resolver, progress)
+    classifier = Classifier(sp, config, resolver, progress, catalog)
     classifier.build_index()
 
-    progress(step='Reading liked songs')
-    tracks = liked_tracks(sp)
+    progress(step='Reading the playlists to sort')
+    into = {sort_state.playlist_key(e) for e in config['playlists']}
+    tracks, seen = [], set()
+    for playlist_id in config.get('sort_from') or [catalog_store.LIKED_ID]:
+        for track in catalog_store.tracks_of(catalog, playlist_id):
+            if track['id'] not in seen:
+                seen.add(track['id'])
+                tracks.append(track)
     items = []
     for i, track in enumerate(tracks, 1):
         items.append(classifier.classify(track))
         if i % 10 == 0 or i == len(tracks):
-            progress(step='Classifying liked songs', done=i, total=len(tracks))
+            progress(step='Sorting songs', done=i, total=len(tracks))
     resolver.save()
 
-    preview = {'generated_at': datetime.now().isoformat(timespec='seconds'), 'items': items}
+    preview = {'generated_at': datetime.now().isoformat(timespec='seconds'), 'items': items,
+               'sources': [p for p in config.get('sort_from') or [] if p in catalog['playlists']],
+               'both': sorted(into & set(config.get('sort_from') or []))}
     save_preview(preview)
     return preview
 
@@ -260,24 +291,46 @@ def resolve_review(track_id, entry_id, remember_artist):
 
 
 def apply_preview(sp):
-    """Add every classified (auto or manual) track to its genre playlist(s)."""
+    """Record every sorted (auto or manual) song in its playlist(s), then write them on Spotify if possible."""
     preview = load_preview()
     playlists = {p['id']: p for p in config_store.load_config()['playlists']}
-    to_add = defaultdict(list)
+    sorted_items, added = [], defaultdict(int)
     for item in preview['items']:
         if item['status'] in ('auto', 'manual'):
             for entry_id in [item['playlist'], *item.get('also', [])]:
                 if entry_id in playlists:
-                    to_add[entry_id].append(item)
-
-    added = {}
-    for entry_id, items in to_add.items():
-        add_to_playlist(sp, playlists[entry_id]['playlist_id'], [i['track_id'] for i in items])
-        for item in items:
+                    sorted_items.append((entry_id, item['track_id']))
+                    added[playlists[entry_id]['name']] += 1
             item['status'] = 'applied'
-        added[playlists[entry_id]['name']] = len(items)
-        save_preview(preview)
-    return added
+    sort_state.record_sorted(sorted_items)
+    save_preview(preview)
+    return {'added': dict(added), 'spotify': write_to_spotify(sp)}
+
+
+def write_to_spotify(sp, review=False):
+    """Write the sorted songs on Spotify when it is connected.
+
+    Songs that waited (no Spotify, quota used up) are not written without the
+    "Sync with Spotify" screen (review=True), since Spotify may have changed meanwhile.
+    Returns 'written', 'review' (changes wait for the screen) or 'offline'.
+    """
+    from spotify_client import SpotifyLimitError, blocked, keys_present, logged_in
+    stored = catalog_store.load()
+    if not (keys_present() and logged_in()) or blocked() or stored.get('source') not in (None, 'spotify'):
+        sort_state.set_waiting(True)
+        return 'offline'
+    try:
+        catalog = catalog_store.refresh_from_spotify(sp)
+        changes = sort_state.plan_sync(catalog)
+        if not review and (sort_state.waiting() or any(c['removed_on_spotify'] for c in changes)):
+            sort_state.set_waiting(True)
+            return 'review'
+        sort_state.push(sp, catalog)
+    except SpotifyLimitError:
+        sort_state.set_waiting(True)
+        return 'offline'
+    sort_state.set_waiting(False)
+    return 'written'
 
 
 class Job:

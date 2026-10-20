@@ -8,11 +8,11 @@
         </span>
         <span class="text-[15px] font-semibold tracking-tight">Music Sorter</span>
       </div>
-      <a *ngIf="reconfiguring" routerLink="/genres" class="btn-ghost">Cancel</a>
+      <a *ngIf="reconfiguring || step !== 'welcome'" routerLink="/sort" class="btn-ghost">Cancel</a>
     </div>
 
     <!-- Steps -->
-    <ol class="mt-10 flex items-center gap-2 text-sm">
+    <ol *ngIf="step !== 'welcome'" class="mt-10 flex items-center gap-2 text-sm">
       <ng-container *ngFor="let s of steps; let i = index; let last = last">
         <li class="flex items-center gap-2"
             [class.text-zinc-900]="stepIndex(step) >= i" [class.text-zinc-400]="stepIndex(step) < i">
@@ -29,7 +29,7 @@
 
     <!-- 1. Welcome / connect -->
     <section *ngIf="step === 'welcome'" class="mt-12">
-      <h1 class="text-3xl font-semibold tracking-tight">{{ reconfiguring ? 'Set up your genres again' : appTitle }}</h1>
+      <h1 class="text-3xl font-semibold tracking-tight">{{ appTitle }}</h1>
       <div class="mt-6 grid gap-2 sm:grid-cols-2">
         <div *ngFor="let f of features" class="flex items-start gap-3 rounded-xl bg-white/60 p-3 ring-1 ring-zinc-900/5">
           <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" [ngClass]="f.color">
@@ -53,15 +53,29 @@
         </div>
       </div>
 
-      <div *ngIf="!backendDown" class="mt-8 grid gap-3 sm:grid-cols-2">
-        <div class="card flex items-start gap-3 p-5" [class.sm:col-span-2]="status?.spotify?.missing_keys">
+      <h2 *ngIf="!backendDown" class="mt-10 text-lg font-semibold tracking-tight">Add your playlists</h2>
+      <div *ngIf="!backendDown" class="mt-4 grid gap-3 sm:grid-cols-2">
+        <!-- Without Premium: import a file -->
+        <a routerLink="/import" class="card flex items-start gap-3 p-5 ring-2 ring-brand-500 transition hover:shadow-lift">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                [ngClass]="status?.playlists && status?.import?.source !== 'spotify' ? 'bg-brand-50 text-brand-600' : 'bg-brand-500 text-white'">
+            <lucide-icon [name]="status?.playlists && status?.import?.source !== 'spotify' ? 'check-circle-2' : 'download'" [size]="18"></lucide-icon>
+          </span>
+          <div class="min-w-0 flex-1 text-sm text-zinc-500">
+            <div class="font-medium text-zinc-900">Import from any streaming service</div>
+            <div>No Premium needed. Export your playlists with TuneMyMusic, from Spotify, Apple Music, Deezer, YouTube Music and more.</div>
+            <div *ngIf="status?.playlists && status?.import?.source !== 'spotify'" class="mt-1 text-brand-700">Imported {{ status?.import?.file }}</div>
+          </div>
+        </a>
+        <div class="card flex items-start gap-3 p-5">
           <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
                 [ngClass]="status?.spotify?.connected ? 'bg-brand-50 text-brand-600' : 'bg-zinc-100 text-zinc-400'">
             <lucide-icon [name]="status?.spotify?.connected ? 'check-circle-2' : status ? 'log-in' : 'loader-2'" [size]="18"
                          [class.animate-spin]="!status"></lucide-icon>
           </span>
           <div class="min-w-0 flex-1 text-sm text-zinc-500">
-            <div class="font-medium text-zinc-900">Spotify</div>
+            <div class="font-medium text-zinc-900">Connect Spotify</div>
+            <div *ngIf="!status?.spotify?.connected">Needs Spotify Premium. Your playlists sync by themselves, sorting is saved on Spotify, and you see your stats.</div>
             <div *ngIf="status?.spotify?.connected">Connected as {{ status?.spotify?.name }}</div>
 
             <!-- No keys in .env -->
@@ -108,9 +122,10 @@
       </div>
 
       <div class="mt-10">
-        <button class="btn-primary px-5 py-2.5" [disabled]="!status?.spotify?.connected" (click)="step = 'choose'">
+        <a routerLink="/home" class="btn-primary px-5 py-2.5" [class.pointer-events-none]="!status?.spotify?.connected && !status?.playlists"
+           [class.opacity-40]="!status?.spotify?.connected && !status?.playlists">
           Continue <lucide-icon name="arrow-right" [size]="16"></lucide-icon>
-        </button>
+        </a>
       </div>
     </section>
 
@@ -137,7 +152,7 @@
                   class="rounded-2xl bg-white p-4 text-left ring-1 transition"
                   [ngClass]="multiPlaylist ? 'ring-2 ring-zinc-900 shadow-soft' : 'ring-zinc-900/5 hover:ring-zinc-300'">
             <div class="font-medium">Several playlists</div>
-            <div class="mt-1 text-sm text-zinc-500">Any playlist that matches. Downloads are only saved to the first playlist.</div>
+            <div class="mt-1 text-sm text-zinc-500">Any playlist that matches.</div>
           </button>
         </div>
       </div>
@@ -148,10 +163,6 @@
           <span class="inline-flex pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"><lucide-icon name="search" [size]="16"></lucide-icon></span>
           <input class="input pl-10" [(ngModel)]="search" placeholder="Search your playlists" />
         </div>
-        <label class="flex cursor-pointer items-center gap-2 text-sm text-zinc-600">
-          <input type="checkbox" [(ngModel)]="showFollowed" class="h-4 w-4 rounded border-zinc-300 accent-zinc-900" />
-          Show playlists I follow
-        </label>
       </div>
 
       <div *ngIf="!playlists.length" class="mt-10 flex items-center gap-2 text-sm text-zinc-500">

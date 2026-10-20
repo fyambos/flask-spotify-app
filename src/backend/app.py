@@ -1,7 +1,10 @@
+import json
 import os
 import platform
 import shutil
 import subprocess
+from datetime import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
@@ -10,13 +13,14 @@ from werkzeug.exceptions import HTTPException
 import requests
 
 import apple_music
+import catalog as catalog_store
 import config_store
+import downloads_watch
 import library
 import setup_analysis
+import sort_state
 import sorter
-from genres import GenreResolver
-from spotify_client import (SpotifyLimitError, add_to_playlist, create_client, my_playlists, playlist_meta,
-                            playlist_tracks, remove_from_playlist)
+from spotify_client import SpotifyLimitError, blocked, create_client, keys_present, logged_in, playlist_meta
 
 load_dotenv()
 app = Flask(__name__)
@@ -42,6 +46,29 @@ reevaluate_job = sorter.Job(setup_analysis.reevaluate)
 library_job = sorter.Job(library.sync)
 import_job = sorter.Job(library.import_files)
 apple_job = sorter.Job(apple_music.update)
+spotify_sync_job = sorter.Job(lambda sp, progress: sort_state.push(sp, catalog_store.refresh_from_spotify(sp, progress), progress))
+
+
+def _import_and_sync(sp, progress, path):
+    """Import an exported playlists file, check the library, and sync it when nothing has to be moved or removed."""
+    progress(step='Reading the file')
+    result = catalog_store.import_file(path)
+    library.IMPORTED_PATH.write_text(json.dumps(result), encoding='utf-8')
+    plan = library.sync(sp, progress, apply=False)
+    if not plan['to_move'] and not plan['to_remove']:
+        library.sync(sp, progress, apply=True)
+
+
+file_import_job = sorter.Job(_import_and_sync)
+
+
+def _on_downloaded_file(path):
+    if library_job.state.get('running') or import_job.state.get('running') or file_import_job.state.get('running'):
+        raise RuntimeError('Wait for the current sync to finish, then import the file again.')
+    file_import_job.start(sp, path=str(path))
+
+
+downloads_watch.start(_on_downloaded_file)
 
 
 @app.errorhandler(Exception)
@@ -87,10 +114,11 @@ def update_settings():
 
 @app.route('/config/playlists', methods=['POST'])
 def add_playlist():
+    """A "sort into" playlist. Without playlist_id: a new playlist, only in the app until the next Spotify sync."""
     body = request.json
     try:
         rules = {f: body.get(f, []) for f in config_store.RULE_FIELDS if f != 'genre_names'}
-        entry = config_store.add_playlist(body.get('name', ''), body['playlist_id'], body['genre_names'], **rules)
+        entry = config_store.add_playlist(body.get('name', ''), body.get('playlist_id'), body.get('genre_names', []), **rules)
     except ValueError as e:
         return jsonify({'error': str(e)}), 409
     return jsonify(entry), 201
@@ -130,12 +158,8 @@ def delete_artist_rule(artist_id):
 
 # --- Setup assistant ---
 
-def _keys_present():
-    return bool(os.getenv('SPOTIFY_CLIENT_ID') and os.getenv('SPOTIFY_CLIENT_SECRET'))
-
-
-def _logged_in():
-    return (config_store.DATA_DIR / '.spotify-token').exists()
+_keys_present = keys_present
+_logged_in = logged_in
 
 
 login_state = {'running': False}
@@ -163,30 +187,111 @@ def spotify_login():
     return jsonify({'running': True}), 202
 
 
+REMINDER_DAYS = 7
+
+
+def _import_status(catalog, config):
+    """Where the playlists come from, and the reminder when the last import is old."""
+    source = catalog.get('source')
+    days = None
+    if catalog.get('updated_at'):
+        days = (datetime.now() - datetime.fromisoformat(catalog['updated_at'])).days
+    from_file = source in ('tunemymusic', 'spotify-export')
+    return {
+        'source': source,
+        'file': catalog.get('file'),
+        'updated_at': catalog.get('updated_at'),
+        'days': days,
+        'reminder': bool(from_file and config.get('import_reminder', True) and days is not None and days > REMINDER_DAYS),
+        'watching': downloads_watch.active(),
+    }
+
+
 @app.route('/setup/status', methods=['GET'])
 def setup_status():
+    config = config_store.load_config()
+    catalog = catalog_store.load()
+    if not catalog.get('source'):
+        catalog = catalog_store.from_last_check() or catalog
     base = {'lastfm': bool(os.getenv('LASTFM_API_KEY')), 'ffmpeg': shutil.which('ffmpeg') is not None,
-            'configured': bool(config_store.load_config()['playlists'])}
+            'configured': bool(config['playlists']), 'playlists': catalog.get('source') is not None,
+            'import': _import_status(catalog, config),
+            'sort': {'pending': sort_state.pending_count(catalog, config) if catalog.get('source') else 0,
+                     'waiting': sort_state.waiting()}}
     if not _keys_present():
         return jsonify({**base, 'spotify': {'connected': False, 'missing_keys': True}})
     if not _logged_in():
         return jsonify({**base, 'spotify': {'connected': False, 'needs_login': True,
                                             'logging_in': login_state['running']}})
+    if blocked():
+        # Connected, but Spotify has blocked the app for now: nothing is sent before the end of the block.
+        try:
+            sp.me()
+        except SpotifyLimitError as e:
+            return jsonify({**base, 'spotify': {'connected': True, 'name': None, 'limit': str(e)}})
     try:
         me = sp.me()
         spotify = {'connected': True, 'name': me.get('display_name') or me.get('id'),
                    'image_url': (me.get('images') or [{}])[0].get('url')}
     except SpotifyLimitError as e:
-        # Connected, but Spotify has blocked the app for now.
         spotify = {'connected': True, 'name': None, 'limit': str(e)}
     except Exception as e:
         spotify = {'connected': False, 'error': str(e)}
-    return jsonify({
-        'spotify': spotify,
-        'lastfm': bool(os.getenv('LASTFM_API_KEY')),
-        'ffmpeg': shutil.which('ffmpeg') is not None,
-        'configured': bool(config_store.load_config()['playlists']),
-    })
+    return jsonify({**base, 'spotify': spotify})
+
+
+# --- Playlists from a file (no Premium) ---
+
+@app.route('/import', methods=['GET'])
+def get_import():
+    config = config_store.load_config()
+    return jsonify({'job': file_import_job.state, 'status': _import_status(catalog_store.load(), config),
+                    'result': library.load_imported(), 'watch': {'last': downloads_watch.state['last'],
+                                                                 'error': downloads_watch.state['error']}})
+
+
+@app.route('/import/watch', methods=['POST'])
+def watch_downloads():
+    """The import guide is open: watch the Downloads folder for the exported file."""
+    downloads_watch.watch_for_guide()
+    return jsonify({'watching': True, 'folder': str(downloads_watch.DOWNLOADS)})
+
+
+@app.route('/import/file', methods=['POST'])
+def import_playlists_file():
+    """An exported file chosen by hand (uploaded from the page)."""
+    upload = request.files.get('file')
+    if not upload:
+        return jsonify({'error': 'No file'}), 400
+    folder = config_store.DATA_DIR / 'imports'
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / Path(upload.filename or 'playlists.csv').name
+    upload.save(path)
+    if not catalog_store.detect(path):
+        return jsonify({'error': 'This file is not a TuneMyMusic CSV export or a Spotify data export.'}), 400
+    if library_job.state.get('running') or import_job.state.get('running'):
+        return jsonify({'error': 'Wait for the current sync to finish'}), 409
+    started = file_import_job.start(sp, path=str(path))
+    return jsonify({'started': started, **file_import_job.state}), 202 if started else 409
+
+
+# --- Sorted songs waiting for Spotify ---
+
+@app.route('/sort/spotify', methods=['GET'])
+def get_spotify_sync():
+    """What "Sync with Spotify" would do (reads Spotify, writes nothing)."""
+    if not (_keys_present() and _logged_in()) or catalog_store.load().get('source') not in (None, 'spotify'):
+        return jsonify({'available': False, 'changes': [], 'job': spotify_sync_job.state})
+    catalog = catalog_store.refresh_from_spotify(sp)
+    return jsonify({'available': True, 'changes': sort_state.plan_sync(catalog), 'job': spotify_sync_job.state})
+
+
+@app.route('/sort/spotify', methods=['POST'])
+def run_spotify_sync():
+    started = spotify_sync_job.start(sp)
+    if started:
+        sort_state.set_waiting(False)
+    return jsonify({'started': started, **spotify_sync_job.state}), 202 if started else 409
 
 
 @app.route('/setup/analyze', methods=['POST'])
@@ -235,7 +340,7 @@ def get_accuracy():
 
 @app.route('/library', methods=['GET'])
 def get_library():
-    job = import_job.state if import_job.state.get('running') else library_job.state
+    job = next((j.state for j in (file_import_job, import_job) if j.state.get('running')), library_job.state)
     return jsonify({'job': job, 'import': library.load_import_result(), 'apple_music': {
         'available': apple_music.available(), 'job': apple_job.state}, **library.summary()})
 
@@ -259,7 +364,7 @@ def import_library():
 
 @app.route('/library/check', methods=['POST'])
 def check_library():
-    if import_job.state.get('running'):
+    if import_job.state.get('running') or file_import_job.state.get('running'):
         return jsonify({'error': 'An import is running'}), 409
     started = library_job.start(sp, apply=False)
     return jsonify({'started': started, **library_job.state}), 202 if started else 409
@@ -267,10 +372,39 @@ def check_library():
 
 @app.route('/library/sync', methods=['POST'])
 def sync_library():
-    if import_job.state.get('running'):
+    if import_job.state.get('running') or file_import_job.state.get('running'):
         return jsonify({'error': 'An import is running'}), 409
     started = library_job.start(sp, apply=True)
     return jsonify({'started': started, **library_job.state}), 202 if started else 409
+
+
+@app.route('/library/example', methods=['GET'])
+def library_example():
+    """A real song of the downloaded playlists, to show where files go for each layout."""
+    config = config_store.load_config()
+    view = sort_state.view(catalog_store.load(), config)
+    ids = library._ordered(config, library.downloaded_playlists(config, view))
+    for pid in ids:
+        for tid in view['playlists'][pid]['track_ids']:
+            track = view['tracks'].get(tid)
+            if track and track.get('artists') and (track.get('album') or {}).get('name'):
+                in_playlists = [view['playlists'][p]['name'] for p in ids if tid in view['playlists'][p]['track_ids']]
+                return jsonify({'album_artist': library.safe_name(library.album_artist(track)),
+                                'album': library.safe_name(track['album']['name']),
+                                'file': library.safe_name(f"{', '.join(a['name'] for a in track['artists'])} - {track['name']}")
+                                        + '.' + config['audio_format'],
+                                'first_playlist': library.safe_name(in_playlists[0]) if in_playlists else None,
+                                'separator': os.sep, 'music_dir': _display_path(library.music_root(config))})
+    return jsonify({'album_artist': 'BLACKPINK', 'album': 'KILL THIS LOVE', 'file': 'BLACKPINK - Kill This Love.mp3',
+                    'first_playlist': 'Kr', 'separator': os.sep, 'music_dir': _display_path(library.music_root(config))})
+
+
+def _display_path(path):
+    """~/Music instead of /Users/name/Music (macOS, Linux)."""
+    home = Path.home()
+    if platform.system() != 'Windows' and (path == home or home in path.parents):
+        return '~/' + str(path.relative_to(home)) if path != home else '~'
+    return str(path)
 
 
 @app.route('/library/reveal', methods=['POST'])
@@ -312,50 +446,40 @@ def apply_likes():
 
 # --- Spotify ---
 
-@app.route('/sort-playlist', methods=['POST'])
-def sort_playlist():
-    """Move the tracks of a playlist into the genre playlists, using the same rules as the likes."""
-    playlist_id = request.json['playlist_id']
-    config = config_store.load_config()
-    resolver = GenreResolver(sp)
-    classifier = sorter.Classifier(sp, config, resolver)
-    classifier.build_index()
-    by_id = classifier.by_id
-    moved = 0
-
-    for track in playlist_tracks(sp, playlist_id):
-        item = classifier.classify(track)
-        if item['status'] == 'review':
-            continue
-        target = by_id[item['playlist']]
-        if target['playlist_id'] == playlist_id:
-            continue
-        if item['status'] != 'already':
-            add_to_playlist(sp, target['playlist_id'], [track['id']])
-            classifier.track_index[track['id']] = target['id']
-            print(f"Moved track {track['name']} to {target['name']} ({item['reason']}).")
-        remove_from_playlist(sp, playlist_id, [track['id']])
-        moved += 1
-
-    resolver.save()
-    return jsonify({'message': f'Playlist sorted successfully! {moved} tracks moved.'})
+CATALOG_TTL = 300  # seconds before the playlists are read from Spotify again for the pages
 
 
 @app.route('/get-playlists', methods=['GET'])
 def get_playlists():
-    me = sp.me()['id']
+    """Your playlists as the app sees them (Spotify or the imported file, plus app-only ones)."""
+    catalog = catalog_store.load()
+    if not catalog.get('source'):
+        catalog = catalog_store.from_last_check() or catalog
+    fresh = catalog.get('updated_at') and (datetime.now() - datetime.fromisoformat(catalog['updated_at'])).total_seconds() < CATALOG_TTL
+    if _keys_present() and _logged_in() and catalog.get('source') in (None, 'spotify') and not fresh and not blocked():
+        try:
+            catalog = catalog_store.refresh_from_spotify(sp)
+        except SpotifyLimitError:
+            if not catalog.get('source'):
+                raise
+    config = config_store.load_config()
+    seen = set(config['download'].get('seen') or [])
+    view = sort_state.view(catalog, config)
     result = []
-    for p in my_playlists(sp):
-        images = p.get('images') or []
-        result.append({
-            'id': p['id'],
-            # Some names are padded with invisible characters (braille blank, hangul filler).
-            'name': p['name'].strip(' \t\u2800\u3164\u200b') or p['name'],
-            'image_url': images[0]['url'] if images else None,
-            'track_count': (p.get('items') or p.get('tracks') or {}).get('total', 0),
-            'owned': (p.get('owner') or {}).get('id') == me,
-        })
+    for item in catalog_store.summary(view)['playlists']:
+        result.append({**item, 'new': bool(seen) and item['id'] not in seen,
+                       'app_only': item['id'].startswith(sort_state.APP_PREFIX)})
     return jsonify(result)
+
+
+@app.route('/download/seen', methods=['POST'])
+def mark_playlists_seen():
+    """The playlists shown in Settings are no longer "New"."""
+    config = config_store.load_config()
+    download = config['download']
+    download['seen'] = list(dict.fromkeys((download.get('seen') or []) + request.json.get('ids', [])))
+    config_store.update_settings({'download': download})
+    return '', 204
 
 
 @app.route('/get-playlist-details/<playlist_id>', methods=['GET'])

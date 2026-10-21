@@ -411,6 +411,16 @@ def get_library():
         'platform': platform.system(), **library.summary()})
 
 
+@app.route('/library/playlists', methods=['GET'])
+def get_library_playlists():
+    return jsonify(library.playlists_overview())
+
+
+@app.route('/library/playlists/<playlist_id>', methods=['GET'])
+def get_library_playlist(playlist_id):
+    return jsonify(library.playlist_songs(playlist_id))
+
+
 @app.route('/library/apple-music', methods=['POST'])
 def update_apple_music():
     if _library_busy():

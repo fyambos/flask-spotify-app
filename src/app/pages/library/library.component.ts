@@ -1,11 +1,13 @@
 import { errorText } from 'src/app/services/errors';
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription, merge } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { EventsService } from 'src/app/services/events.service';
 import { ConfirmDialogComponent } from 'src/app/components/confirm-dialog/confirm-dialog.component';
-import { Devices, LibraryState, LibraryTrack, PlaylistService, YouTubeMatch } from 'src/app/services/playlist.service';
+import {
+  Devices, LibraryPlaylist, LibrarySong, LibraryState, LibraryTrack, PlaylistService, YouTubeMatch,
+} from 'src/app/services/playlist.service';
 import { StatusService } from 'src/app/services/status.service';
 
 @Component({
@@ -102,7 +104,51 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Sync was clicked: the dialog opens once the check that comes first is done. */
   private syncAsked = false;
 
+  /** The downloaded playlists, and the one open below them. */
+  playlists: LibraryPlaylist[] = [];
+  open: { playlist: LibraryPlaylist; songs: LibrarySong[] | null } | null = null;
+
+  /** Playlists shown in the grid: 12 at a time, the last place says how many more there are. */
+  playlistLimit = 12;
+
+  get shownPlaylists(): LibraryPlaylist[] {
+    return this.playlists.length <= this.playlistLimit ? this.playlists : this.playlists.slice(0, this.playlistLimit - 1);
+  }
+
+  get morePlaylists(): number {
+    return Math.min(12, this.playlists.length - this.shownPlaylists.length);
+  }
+
+  get covers(): string[] {
+    return this.playlists.map(p => p.image_url).filter((url): url is string => !!url).slice(0, 12);
+  }
+
+  openPlaylist(playlist: LibraryPlaylist): void {
+    if (this.open?.playlist.id === playlist.id) {
+      this.open = null;
+      return;
+    }
+    this.open = { playlist, songs: null };
+    this.playlistService.getLibraryPlaylist(playlist.id).subscribe(res => {
+      if (this.open?.playlist.id === playlist.id) this.open = { playlist, songs: res.songs };
+    });
+  }
+
+  @HostListener('document:keydown.escape')
+  closePlaylist(): void {
+    this.open = null;
+  }
+
+  trackBySong(_: number, song: LibrarySong): string {
+    return song.track_id;
+  }
+
   refresh(): void {
+    this.playlistService.getLibraryPlaylists().subscribe(playlists => {
+      this.playlists = playlists;
+      const open = this.open && playlists.find(p => p.id === this.open?.playlist.id);
+      if (open) this.playlistService.getLibraryPlaylist(open.id).subscribe(res => this.open = { playlist: open, songs: res.songs });
+    });
     this.playlistService.getLibrary().subscribe(state => {
       const checked = this.syncAsked && !state.job.running;
       this.state = state;

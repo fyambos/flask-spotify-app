@@ -1530,6 +1530,49 @@ def summary():
     }
 
 
+def _song_status(library, plan, track_id):
+    """'ok' (a file, its own or its twin's), 'failed', 'ignored' or 'pending' (downloaded at the next Sync)."""
+    if track_id in library.get('ignored', {}):
+        return 'ignored'
+    record = library['tracks'].get(track_id) or {}
+    twin = (plan or {}).get('shared', {}).get(track_id)
+    if record.get('status') == 'ok' or (library['tracks'].get(twin) or {}).get('status') == 'ok':
+        return 'ok'
+    return 'failed' if record.get('status') == 'failed' else 'pending'
+
+
+def playlists_overview():
+    """The downloaded playlists, with their cover and how many of their songs have a file."""
+    library, plan = load_library(), load_plan()
+    catalog = catalog_store.load()
+    result = []
+    for pid, info in ((plan or {}).get('playlists') or {}).items():
+        ids = list(dict.fromkeys(info['track_ids']))
+        statuses = [_song_status(library, plan, tid) for tid in ids]
+        result.append({'id': pid, 'name': info['name'], 'songs': len(ids), 'downloaded': statuses.count('ok'),
+                       'image_url': (catalog['playlists'].get(pid) or {}).get('image_url')})
+    return result
+
+
+def playlist_songs(playlist_id):
+    """The songs of a downloaded playlist, in playlist order, with what the library has of each."""
+    library, plan = load_library(), load_plan()
+    catalog = catalog_store.load()
+    info = ((plan or {}).get('playlists') or {}).get(playlist_id) or {}
+    songs = []
+    for tid in dict.fromkeys(info.get('track_ids') or []):
+        track = catalog['tracks'].get(tid)
+        if not track or not track.get('name'):
+            continue
+        images = sorted((track.get('album') or {}).get('images') or [], key=lambda i: i.get('width') or 0)
+        songs.append({'track_id': tid, 'title': track['name'], 'artists': [a['name'] for a in track.get('artists') or []],
+                      'album': (track.get('album') or {}).get('name') or '',
+                      'image_url': images[0]['url'] if images else None,
+                      'duration': _clock((track.get('duration_ms') or 0) / 1000) if track.get('duration_ms') else '',
+                      'status': _song_status(library, plan, tid)})
+    return {'id': playlist_id, 'name': info.get('name', ''), 'songs': songs}
+
+
 # --- Import files downloaded before (another computer, an old spotdl run...) ---
 
 IMPORT_RESULT_PATH = DATA_DIR / 'import-result.json'

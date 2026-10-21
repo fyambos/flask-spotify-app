@@ -6,9 +6,10 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatDialogModule } from '@angular/material/dialog';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import {
-  LucideAngularModule, AlertTriangle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, HardDrive, Home, LogIn,
-  GripVertical, Heart, Info, ListMusic, Loader2, Music2, Pencil, Plus, RefreshCw, Search, Settings,
-  Sparkles, Trash2, Wand2, X,
+  LucideAngularModule, AlertCircle, AlertTriangle, ArrowDownCircle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft,
+  ChevronRight, Download, ExternalLink, EyeOff, FolderTree, GripVertical, HardDrive, Heart, Home, Info, Laptop, ListMusic,
+  Loader2, LogIn, Monitor, Music2, Pencil, Plus, RefreshCw, Search, Settings, Smartphone, Sparkles, TabletSmartphone, Trash2,
+  Wand2, X,
 } from 'lucide-angular';
 
 import { AppRoutingModule } from './app-routing.module';
@@ -56,8 +57,8 @@ import { ImportComponent } from './pages/import/import.component';
     MatDialogModule,
     DragDropModule,
     LucideAngularModule.pick({
-      AlertTriangle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, GripVertical,
-      HardDrive, Heart, Home, LogIn,
+      AlertCircle, AlertTriangle, ArrowDownCircle, ArrowRight, BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, GripVertical,
+      EyeOff, FolderTree, HardDrive, Heart, Home, Laptop, LogIn, Monitor, Smartphone, TabletSmartphone,
       Info, ListMusic, Loader2, Music2, Pencil, Plus, RefreshCw, Search, Settings, Sparkles, Trash2, Wand2, X,
     }),
   ],

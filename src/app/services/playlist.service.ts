@@ -60,6 +60,26 @@ export interface LikeItem {
   reason: string;
 }
 
+/** A downloaded playlist: how many of its songs have a file. */
+export interface LibraryPlaylist {
+  id: string;
+  name: string;
+  songs: number;
+  downloaded: number;
+  image_url: string | null;
+}
+
+export interface LibrarySong {
+  track_id: string;
+  title: string;
+  artists: string[];
+  album: string;
+  image_url: string | null;
+  duration: string;
+  /** pending: downloaded at the next Sync. */
+  status: 'ok' | 'failed' | 'ignored' | 'pending';
+}
+
 export interface SpotifyPlaylist {
   id: string;
   name: string;
@@ -405,6 +425,13 @@ export class PlaylistService {
   }
   runSpotifySync(): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/sort/spotify`, {});
+  }
+
+  getLibraryPlaylists(): Observable<LibraryPlaylist[]> {
+    return this.http.get<LibraryPlaylist[]>(`${this.apiUrl}/library/playlists`);
+  }
+  getLibraryPlaylist(id: string): Observable<{ id: string; name: string; songs: LibrarySong[] }> {
+    return this.http.get<{ id: string; name: string; songs: LibrarySong[] }>(`${this.apiUrl}/library/playlists/${id}`);
   }
 
   getDuplicates(): Observable<{ duplicates: SpotifyDuplicate[]; job: JobState }> {

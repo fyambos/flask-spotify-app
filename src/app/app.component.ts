@@ -1,3 +1,4 @@
+import { errorText } from './services/errors';
 import { Component, OnInit } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
@@ -38,7 +39,7 @@ export class AppComponent implements OnInit {
       this.buildNav();
       if (first) {
         first = false;
-        if (status.spotify.limit) this.notice.show(status.spotify.limit);
+        if (status.spotify.limit) this.notice.show(errorText('spotify_limit', { until: status.spotify.limit }));
         // First launch: no playlists yet, start with the Welcome screen.
         if (!status.playlists && !status.spotify.connected) this.router.navigate(['/setup']);
       }

@@ -24,7 +24,6 @@ export class StatusService {
   /** Spotify can be read and written (Premium connected, not blocked). */
   get spotifyReady(): boolean {
     const spotify = this.status?.spotify;
-    return !!spotify?.connected && !spotify.limit && this.status?.import.source !== 'tunemymusic'
-      && this.status?.import.source !== 'spotify-export';
+    return !!spotify?.connected && !spotify.limit && !this.status?.import.from_file;
   }
 }

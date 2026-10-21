@@ -1,3 +1,6 @@
+import { errorText } from 'src/app/services/errors';
+import { Subscription } from 'rxjs';
+import { EventsService } from 'src/app/services/events.service';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent } from 'src/app/components/confirm-dialog/confirm-dialog.component';
@@ -29,7 +32,7 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
     { id: 'applied', label: 'Added' },
     { id: 'already', label: 'Already sorted' },
   ];
-  private poll: any = null;
+  private subscriptions: Subscription[] = [];
 
   config_loaded = false;
   /** "Sort from" playlists. */
@@ -38,11 +41,24 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
   addingSource = '';
   status: SetupStatus | null = null;
   sync: { changes: SpotifySyncChange[]; loading: boolean; running: boolean } | null = null;
-  private syncPoll: any = null;
 
-  constructor(private playlistService: PlaylistService, private dialog: MatDialog, private statusService: StatusService) { }
+  constructor(private playlistService: PlaylistService, private dialog: MatDialog, private statusService: StatusService,
+              private events: EventsService) { }
 
   ngOnInit(): void {
+    // The analysis and "Sync with Spotify" report each step through the backend's stream.
+    this.subscriptions.push(
+      this.events.job('likes').subscribe(job => {
+        if (this.state) this.state = { ...this.state, job };
+        if (!job.running) this.refresh();
+      }),
+      this.events.job('spotify_sync').subscribe(job => {
+        if (job.running || !this.sync?.running) return;
+        this.sync = null;
+        this.message = job.error ? errorText(job.error, job.error_params) : 'Synced with Spotify.';
+        this.statusService.refresh();
+      }),
+    );
     this.playlistService.getConfig().subscribe(config => {
       this.config_loaded = true;
       this.playlists = config.playlists;
@@ -136,16 +152,7 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
   runSync(): void {
     if (!this.sync) return;
     this.sync.running = true;
-    this.playlistService.runSpotifySync().subscribe(() => {
-      clearInterval(this.syncPoll);
-      this.syncPoll = setInterval(() => this.playlistService.getSpotifySync().subscribe(res => {
-        if (res.job.running) return;
-        clearInterval(this.syncPoll);
-        this.sync = null;
-        this.message = res.job.error || 'Synced with Spotify.';
-        this.statusService.refresh();
-      }), 1500);
-    });
+    this.playlistService.runSpotifySync().subscribe();
   }
 
   get syncTotals(): { add: number; removed: number; create: number } {
@@ -158,8 +165,7 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    clearInterval(this.poll);
-    clearInterval(this.syncPoll);
+    this.subscriptions.forEach(s => s.unsubscribe());
   }
 
   refresh(): void {
@@ -171,12 +177,6 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
           if (item.status === 'review' && preset && !(item.track_id in this.choices)) {
             this.choices[item.track_id] = preset;
           }
-        }
-        if (state.job.running && !this.poll) {
-          this.poll = setInterval(() => this.refresh(), 1500);
-        } else if (!state.job.running && this.poll) {
-          clearInterval(this.poll);
-          this.poll = null;
         }
         if (!this.count('review') && this.filter === 'review' && this.count('planned')) {
           this.filter = 'planned';

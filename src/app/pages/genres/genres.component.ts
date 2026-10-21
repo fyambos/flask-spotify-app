@@ -1,3 +1,5 @@
+import { Subscription } from 'rxjs';
+import { EventsService } from 'src/app/services/events.service';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent } from 'src/app/components/confirm-dialog/confirm-dialog.component';
@@ -19,11 +21,16 @@ export class GenresComponent implements OnInit, OnDestroy {
   multiPlaylist = false;
   creating = false;
   newName = '';
-  private poll: any = null;
+  private accuracyJob?: Subscription;
 
-  constructor(private playlistService: PlaylistService, private dialog: MatDialog) { }
+  constructor(private playlistService: PlaylistService, private dialog: MatDialog, private events: EventsService) { }
 
   ngOnInit(): void {
+    // The accuracy check reports each step through the backend's stream.
+    this.accuracyJob = this.events.job('accuracy').subscribe(job => {
+      if (this.accuracy) this.accuracy = { ...this.accuracy, job };
+      if (!job.running) this.refreshAccuracy();
+    });
     this.playlistService.getConfig().subscribe(config => {
       this.playlists = config.playlists;
       this.artistRules = config.artist_rules;
@@ -37,7 +44,7 @@ export class GenresComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    clearInterval(this.poll);
+    this.accuracyJob?.unsubscribe();
   }
 
   /** Results of the last accuracy check (they may be from older rules, see accuracyOutdated). */
@@ -75,15 +82,7 @@ export class GenresComponent implements OnInit, OnDestroy {
   }
 
   refreshAccuracy(): void {
-    this.playlistService.getAccuracy().subscribe(state => {
-      this.accuracy = state;
-      if (state.job.running && !this.poll) {
-        this.poll = setInterval(() => this.refreshAccuracy(), 1500);
-      } else if (!state.job.running && this.poll) {
-        clearInterval(this.poll);
-        this.poll = null;
-      }
-    });
+    this.playlistService.getAccuracy().subscribe(state => this.accuracy = state);
   }
 
   checkAccuracy(): void {

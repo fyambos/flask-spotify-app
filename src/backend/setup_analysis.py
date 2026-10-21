@@ -567,17 +567,16 @@ def load_accuracy():
 
 def apply_proposal(entries, fallback_genre=None, multi_playlist=None):
     """Replace the genre playlists of the config by the accepted ones (in this order)."""
-    config = config_store.load_config()
-    config['playlists'] = [
-        {'id': e.get('id') or config_store._new_id(), 'name': e['name'], 'playlist_id': e['playlist_id'],
-         **{f: e.get(f, []) for f in config_store.RULE_FIELDS}}
-        for e in entries
-    ]
-    if fallback_genre is not None:
-        config['fallback_genre'] = fallback_genre
-    if multi_playlist is not None:
-        config['multi_playlist'] = bool(multi_playlist)
-    config_store.save_config(config)
+    with config_store.editing() as config:
+        config['playlists'] = [
+            {'id': e.get('id') or config_store._new_id(), 'name': e['name'], 'playlist_id': e['playlist_id'],
+             **{f: e.get(f, []) for f in config_store.RULE_FIELDS}}
+            for e in entries
+        ]
+        if fallback_genre is not None:
+            config['fallback_genre'] = fallback_genre
+        if multi_playlist is not None:
+            config['multi_playlist'] = bool(multi_playlist)
 
     # The proposal's accuracy is still valid if its rules were accepted as they are.
     proposal = load_proposal()

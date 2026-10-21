@@ -109,13 +109,21 @@ def create_client():
     return sp
 
 
+_cache = {'stamp': None, 'data': None}  # the file is 8 MB: read again only when it changed on disk
+
+
 def _load_cache():
-    if CACHE_PATH.exists():
+    try:
+        stat = CACHE_PATH.stat()
+        stamp = (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return {'playlists': {}, 'liked': None}
+    if _cache['stamp'] != stamp:
         try:
-            return json.loads(CACHE_PATH.read_text(encoding='utf-8'))
+            _cache.update(stamp=stamp, data=json.loads(CACHE_PATH.read_text(encoding='utf-8')))
         except ValueError:
-            pass
-    return {'playlists': {}, 'liked': None}
+            return {'playlists': {}, 'liked': None}
+    return _cache['data']
 
 
 def _save_cache(cache):
@@ -123,6 +131,8 @@ def _save_cache(cache):
     tmp = CACHE_PATH.with_suffix('.tmp')
     tmp.write_text(json.dumps(cache, ensure_ascii=False), encoding='utf-8')
     tmp.replace(CACHE_PATH)
+    stat = CACHE_PATH.stat()
+    _cache.update(stamp=(stat.st_mtime_ns, stat.st_size), data=cache)
 
 
 def _compact(track):
@@ -201,6 +211,12 @@ def playlist_tracks(sp, playlist_id):
     return tracks
 
 
+def remember_snapshots(listing):
+    """The listing just read gives every snapshot id: a playlist changed a minute ago is read again."""
+    with _lock:
+        _snapshots.update(at=time.time(), value={p['id']: p.get('snapshot_id') for p in listing if p})
+
+
 def _forget_snapshots():
     with _lock:
         _snapshots['at'] = 0
@@ -238,6 +254,17 @@ def create_playlist(sp, name):
     """Create a private playlist (POST /me/playlists, which replaced /users/{id}/playlists in 2026). Returns its id."""
     _forget_snapshots()
     return sp._post('me/playlists', payload={'name': name, 'public': False})['id']
+
+
+_me = {'at': 0, 'value': None}
+ME_TTL = 600  # seconds: your name and id change rarely, asked once in a while instead of at every page
+
+
+def me(sp):
+    """Your Spotify profile (id, name, picture), kept a few minutes."""
+    if _me['value'] is None or time.time() - _me['at'] > ME_TTL:
+        _me.update(at=time.time(), value=sp.me())
+    return _me['value']
 
 
 def keys_present():

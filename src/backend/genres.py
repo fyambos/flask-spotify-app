@@ -7,6 +7,7 @@ Results are cached per artist in data/cache/artist-genres.json, so each artist i
 only looked up once (the Spotify batch endpoint no longer exists).
 """
 import json
+import threading
 import os
 import re
 import time
@@ -32,6 +33,9 @@ NAME_PREFIX = 'name:'
 def artist_key(artist):
     """The Spotify id of an artist, or 'name:<name>' for artists read from a file."""
     return artist.get('id') or NAME_PREFIX + re.sub(r'\s+', ' ', (artist.get('name') or '').strip().lower())
+
+
+_save_lock = threading.Lock()
 
 
 class GenreResolver:
@@ -123,10 +127,18 @@ class GenreResolver:
         return result
 
     def save(self):
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = CACHE_PATH.with_suffix('.tmp')
-        tmp.write_text(json.dumps(self.cache, ensure_ascii=False, indent=1), encoding='utf-8')
-        tmp.replace(CACHE_PATH)
+        """Adds what this resolver found to the file: two jobs at once (a Sync and the Liked Songs
+        analysis) each keep the other's artists instead of writing over them."""
+        with _save_lock:
+            try:
+                on_disk = json.loads(CACHE_PATH.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                on_disk = {}
+            self.cache = {**on_disk, **self.cache}
+            CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            tmp = CACHE_PATH.with_name(f'{CACHE_PATH.name}.{threading.get_ident()}.tmp')
+            tmp.write_text(json.dumps(self.cache, ensure_ascii=False, indent=1), encoding='utf-8')
+            tmp.replace(CACHE_PATH)
         self._dirty = 0
 
 

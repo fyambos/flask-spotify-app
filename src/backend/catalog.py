@@ -15,18 +15,22 @@ previous catalog or the config is reused, else one is made from the name.
 """
 import csv
 import hashlib
+import io
 import json
 import re
 import zipfile
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
 import config_store
+from errors import AppError
 from config_store import DATA_DIR
 
 CATALOG_PATH = DATA_DIR / 'catalog.json'
 PREVIOUS_PATH = DATA_DIR / 'catalog-previous.json'
 LIKED_ID = 'liked'
+SPOTIFY_ID = re.compile(r'[A-Za-z0-9]{22}')
 LIKED_NAME = 'Liked Songs'
 INVISIBLE = '⠀ㅤ​'
 # TuneMyMusic exports 500 songs max from playlists of other users.
@@ -34,25 +38,58 @@ OTHER_USER_CAP = 500
 
 TUNEMYMUSIC_HEADER = ['Track name', 'Artist name', 'Album', 'Playlist name', 'Type']
 TUNEMYMUSIC_LIKED = 'Favorite'
+EXPORTIFY_HEADER = ['Track URI', 'Track Name', 'Artist Name(s)', 'Duration (ms)']
+FILE_SOURCES = ('tunemymusic', 'spotify-export', 'exportify')
 
 
 def empty():
     return {'source': None, 'updated_at': None, 'file': None, 'playlists': {}, 'tracks': {}}
 
 
+_loaded = {'stamp': None, 'data': None}  # 3.4 MB read by every page and the Downloads watch: once per change
+
+
 def load():
-    if CATALOG_PATH.exists():
-        return json.loads(CATALOG_PATH.read_text(encoding='utf-8'))
-    return empty()
+    """The catalog, read again only when the file changed. Shared: change it only to save it with _save."""
+    try:
+        stat = CATALOG_PATH.stat()
+    except OSError:
+        return empty()
+    stamp = (stat.st_mtime_ns, stat.st_size)
+    if _loaded['stamp'] != stamp:
+        _loaded.update(stamp=stamp, data=json.loads(CATALOG_PATH.read_text(encoding='utf-8')))
+    return _loaded['data']
+
+
+def _unescape_names(track):
+    """Some releases come with HTML entities in their names ('it&#039;s'): written as they read."""
+    import html
+    album = track.get('album') or {}
+    for item in [track, album] + list(track.get('artists') or []) + list(album.get('artists') or []):
+        if isinstance(item.get('name'), str) and '&' in item['name']:
+            item['name'] = html.unescape(item['name'])
 
 
 def _save(catalog, keep_previous):
+    for track in catalog.get('tracks', {}).values():
+        _unescape_names(track)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if keep_previous and CATALOG_PATH.exists():
         CATALOG_PATH.replace(PREVIOUS_PATH)
     tmp = CATALOG_PATH.with_suffix('.tmp')
     tmp.write_text(json.dumps(catalog, ensure_ascii=False), encoding='utf-8')
     tmp.replace(CATALOG_PATH)
+    stat = CATALOG_PATH.stat()
+    _loaded.update(stamp=(stat.st_mtime_ns, stat.st_size), data=catalog)
+
+
+def follows_spotify(catalog):
+    """True when Spotify is read for these playlists as soon as it is connected: always, except for a
+    file imported from another service (Deezer, Apple Music...), whose songs have no Spotify id."""
+    if catalog.get('source') in (None, 'spotify'):
+        return True
+    ids = list(catalog.get('tracks', {}))
+    return bool(ids) and sum(bool(SPOTIFY_ID.fullmatch(t)) for t in ids) * 2 >= len(ids)
 
 
 def clean_name(name):
@@ -93,7 +130,8 @@ def maybe_incomplete(playlist):
 
 def refresh_from_spotify(sp, progress=None):
     """Read Liked Songs and every playlist of your library. Returns the catalog."""
-    from spotify_client import liked_tracks, my_playlists, playlist_tracks
+    from spotify_client import SpotifyLimitError, liked_tracks, my_playlists, playlist_tracks, remember_snapshots
+    from spotify_client import me as spotify_me
 
     progress = progress or (lambda **kw: None)
     old = load()
@@ -102,14 +140,16 @@ def refresh_from_spotify(sp, progress=None):
     tracks = {t['id']: t for t in liked}
     playlists = {LIKED_ID: {'name': LIKED_NAME, 'owned': True, 'track_ids': [t['id'] for t in liked]}}
 
-    me = sp.me()['id']
+    me = spotify_me(sp)['id']
     listing = my_playlists(sp)
+    remember_snapshots(listing)
     # Only the playlists that are downloaded or sorted are read song by song: the others only need
     # their name and size, which the listing gives (fewer requests, Spotify has a daily quota).
     config = config_store.load_config()
     all_mine = config['download']['mode'] == 'all'
     used = set(config['download'].get('playlists') or []) | set(config.get('sort_from') or []) \
         | {e.get('playlist_id') for e in config['playlists']}
+    unreadable = []  # downloaded or sorted playlists Spotify did not give this time
     for i, p in enumerate(listing, 1):
         name = clean_name(p['name'])
         owned = (p.get('owner') or {}).get('id') == me or bool(p.get('collaborative'))
@@ -120,9 +160,13 @@ def refresh_from_spotify(sp, progress=None):
             progress(step=f'Reading {name}', done=i, total=len(listing))
             try:
                 items = playlist_tracks(sp, p['id'])
+            except SpotifyLimitError:
+                raise  # the last copy is used until the end of the block
             except Exception:
-                # Unreadable (removed, or not allowed): keep what was read before.
+                # Not read this time (network, not allowed): what was read before is kept, and nothing
+                # of it counts as removed (a playlist taken for empty would send its songs to _Removed).
                 items = tracks_of(old, p['id'])
+                unreadable.append(name)
             total = len(items)
         for t in items:
             tracks.setdefault(t['id'], t)
@@ -132,6 +176,8 @@ def refresh_from_spotify(sp, progress=None):
                               'image_url': images[0]['url'] if images else None, 'total': total}
 
     catalog = {'source': 'spotify', 'updated_at': _now(), 'file': None, 'playlists': playlists, 'tracks': tracks}
+    if unreadable:
+        catalog.update(partial=True, unreadable=unreadable)
     _save(catalog, keep_previous=old.get('source') != 'spotify')
     return catalog
 
@@ -175,18 +221,25 @@ def from_last_check():
 # --- From a file ---
 
 def detect(path):
-    """'tunemymusic', 'spotify-export' or None."""
+    """'tunemymusic', 'spotify-export', 'exportify' or None."""
     path = Path(path)
     try:
         if path.suffix.lower() == '.csv':
             with open(path, encoding='utf-8-sig', newline='') as f:
                 header = next(csv.reader(f), [])
-            return 'tunemymusic' if all(h in header for h in TUNEMYMUSIC_HEADER) else None
+            if all(h in header for h in TUNEMYMUSIC_HEADER):
+                return 'tunemymusic'
+            return 'exportify' if all(h in header for h in EXPORTIFY_HEADER) else None
         if path.suffix.lower() == '.zip':
             with zipfile.ZipFile(path) as z:
                 names = z.namelist()
-            if any(n.endswith('YourLibrary.json') for n in names) or any(re.search(r'Playlist\d*\.json$', n) for n in names):
-                return 'spotify-export'
+                if any(n.endswith('YourLibrary.json') for n in names) or any(re.search(r'Playlist\d*\.json$', n) for n in names):
+                    return 'spotify-export'
+                csvs = [n for n in names if n.lower().endswith('.csv')]
+                if csvs:
+                    with z.open(csvs[0]) as f:
+                        header = next(csv.reader(io.TextIOWrapper(f, encoding='utf-8-sig')), [])
+                    return 'exportify' if all(h in header for h in EXPORTIFY_HEADER) else None
     except (OSError, zipfile.BadZipFile, UnicodeDecodeError, csv.Error):
         return None
     return None
@@ -199,11 +252,14 @@ def import_file(path):
         playlists, tracks = _read_tunemymusic(path)
     elif kind == 'spotify-export':
         playlists, tracks = _read_spotify_export(path)
+    elif kind == 'exportify':
+        playlists, tracks = _read_exportify(path)
     else:
-        raise ValueError('This file is not a TuneMyMusic CSV export or a Spotify data export.')
+        raise AppError('not_an_export')
 
     old = load()
     playlists = _reuse_ids(playlists, old)
+    tracks = _known_details(tracks, old)
     catalog = {'source': kind, 'updated_at': _now(), 'file': Path(path).name, 'playlists': playlists, 'tracks': tracks}
     _save(catalog, keep_previous=True)
     return {'kind': kind, 'file': Path(path).name, **compare(old, catalog)}
@@ -287,11 +343,65 @@ def _read_spotify_export(path):
     return playlists, tracks
 
 
+def _known_details(tracks, old):
+    """Songs already read from Spotify keep what the file lacks (album artist, length, cover): their
+    files stay in the same folder whether the playlists come from Spotify or from a file."""
+    from spotify_client import CACHE_PATH
+    known = {t: v for t, v in old.get('tracks', {}).items() if (v.get('album') or {}).get('artists')}
+    try:
+        cache = json.loads(CACHE_PATH.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        cache = {}
+    for entry in [cache.get('liked') or {}] + list((cache.get('playlists') or {}).values()):
+        for t in entry.get('tracks') or []:
+            if (t.get('album') or {}).get('artists'):
+                known.setdefault(t['id'], t)
+    return {tid: known.get(tid, track) for tid, track in tracks.items()}
+
+
+def _read_exportify(path):
+    """Exportify: one CSV per playlist (a zip of them, or one CSV), named after the playlist."""
+    path = Path(path)
+    if path.suffix.lower() == '.zip':
+        with zipfile.ZipFile(path) as z:
+            files = {n: z.read(n).decode('utf-8-sig') for n in z.namelist() if n.lower().endswith('.csv')}
+    else:
+        files = {path.name: path.read_text(encoding='utf-8-sig')}
+    rows = {n: list(csv.DictReader(io.StringIO(text))) for n, text in files.items()}
+    # Liked Songs are all added by you: that gives your account, to know the playlists of other users.
+    me = Counter(r.get('Added By') for r in rows.get('Liked_Songs.csv', []) if r.get('Added By')).most_common(1)
+    me = me[0][0] if me else None
+    playlists, tracks = {}, {}
+    for name, items in rows.items():
+        if name == 'Saved_Albums.csv':
+            continue  # albums, not a playlist
+        title = Path(name).stem.replace('_', ' ')
+        key = LIKED_ID if name == 'Liked_Songs.csv' else 'name:' + clean_name(title)
+        added_by = {r.get('Added By') for r in items if r.get('Added By')}
+        owned = True if key == LIKED_ID or (me and me in added_by) else (False if me and added_by else None)
+        playlist = playlists.setdefault(key, {'name': LIKED_NAME if key == LIKED_ID else clean_name(title),
+                                              'owned': owned, 'track_ids': []})
+        for r in items:
+            tid = _uri_id(r.get('Track URI'))
+            if not tid or not r.get('Track Name'):
+                continue  # episodes and local files
+            artists = [a for a in (r.get('Artist Name(s)') or '').split(';') if a]
+            track = _file_track(tid, r['Track Name'], artists[0] if artists else '', r.get('Album Name') or '',
+                                r.get('ISRC') or None)
+            track['artists'] = [{'id': None, 'name': a} for a in artists]
+            track['duration_ms'] = int(r['Duration (ms)']) if (r.get('Duration (ms)') or '').isdigit() else None
+            track['album']['release_date'] = r.get('Release Date') or None
+            tracks.setdefault(tid, track)
+            playlist['track_ids'].append(tid)  # a song twice in a playlist stays twice, as on Spotify
+    return playlists, tracks
+
+
 def _reuse_ids(playlists, old):
     """Give each playlist read from a file the id it had before (same name)."""
-    known = {}
+    known, loose = {}, {}
     for pid, p in old.get('playlists', {}).items():
         known.setdefault(_name_key(p['name']), pid)
+        loose.setdefault(_loose_key(p['name']), (pid, p['name']))
     for entry in config_store.load_config()['playlists']:
         if entry.get('playlist_id'):
             known.setdefault(_name_key(entry['name']), entry['playlist_id'])
@@ -300,13 +410,24 @@ def _reuse_ids(playlists, old):
         if key == LIKED_ID:
             result[LIKED_ID] = playlist
             continue
-        pid = known.get(_name_key(playlist['name'])) or 'file:' + hashlib.sha1(_name_key(playlist['name']).encode()).hexdigest()[:12]
-        if pid in result:  # two playlists with the same name
-            pid = f'{pid}-{len(result)}'
+        pid = known.get(_name_key(playlist['name']))
+        if not pid and _loose_key(playlist['name']) in loose:
+            # 'Lofi Girl - beats to relaxstudy to' (file name) = 'Lofi Girl - beats to relax/study to'
+            pid, playlist['name'] = loose[_loose_key(playlist['name'])]
+        pid = pid or 'file:' + hashlib.sha1(_name_key(playlist['name']).encode()).hexdigest()[:12]
+        if pid in result:  # two playlists with the same name: the second is '<id>-2' at every import
+            n = 2
+            while f'{pid}-{n}' in result:
+                n += 1
+            pid = f'{pid}-{n}'
         if pid in old.get('playlists', {}) and old['playlists'][pid].get('owned') is not None:
             playlist['owned'] = old['playlists'][pid]['owned']
         result[pid] = playlist
     return result
+
+
+def _loose_key(name):
+    return re.sub(r'[\W_]+', '', clean_name(name).lower())
 
 
 def _name_key(name):

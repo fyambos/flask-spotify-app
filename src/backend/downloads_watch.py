@@ -11,11 +11,17 @@ from datetime import datetime
 from pathlib import Path
 
 import catalog as catalog_store
+import errors
+import events
 
 DOWNLOADS = Path.home() / 'Downloads'
 INTERVAL = 3          # seconds between two looks
 GUIDE_WATCH = 3600    # seconds the guide keeps the watch on
 SETTLE = 2            # seconds a file must stay the same size (still downloading otherwise)
+
+class Busy(Exception):
+    """Raised by on_file when a sync is running: the file is imported once it is done."""
+
 
 state = {'watching_until': 0, 'last': None, 'error': None, 'started_at': time.time()}
 _thread = None
@@ -38,13 +44,13 @@ def watch_for_guide():
 
 def active():
     source = catalog_store.load().get('source')
-    return time.time() < state['watching_until'] or source in ('tunemymusic', 'spotify-export')
+    return time.time() < state['watching_until'] or source in catalog_store.FILE_SOURCES
 
 
 def _since():
     catalog = catalog_store.load()
     last_import = 0
-    if catalog.get('updated_at') and catalog.get('source') in ('tunemymusic', 'spotify-export'):
+    if catalog.get('updated_at') and catalog.get('source') in catalog_store.FILE_SOURCES:
         last_import = datetime.fromisoformat(catalog['updated_at']).timestamp()
     if time.time() < state['watching_until']:
         return max(last_import, state.get('guide_started_at', 0) - 60)
@@ -69,20 +75,36 @@ def _loop():
     seen = set()
     while True:
         time.sleep(INTERVAL)
-        if not active() or _on_file is None:
-            continue
-        for path in _candidates():
+        try:
+            _look(seen)
+        except Exception as e:  # a file removed while it was read, a folder not readable...: keep watching
+            state['error'] = errors.describe(e)[0]
+
+
+def _look(seen):
+    if not active() or _on_file is None:
+        return
+    for path in _candidates():
+        try:
             key = (str(path), path.stat().st_mtime)
             if key in seen:
                 continue
             size = path.stat().st_size
             time.sleep(SETTLE)
-            if not path.exists() or path.stat().st_size != size:
-                continue
+            if path.stat().st_size != size:
+                continue  # still downloading
+        except OSError:
+            continue  # removed in the meantime
+        if not catalog_store.detect(path):
             seen.add(key)
-            if catalog_store.detect(path):
-                try:
-                    _on_file(path)
-                    state.update(last=str(path), error=None)
-                except Exception as e:  # shown in the guide
-                    state.update(last=str(path), error=str(e))
+            continue
+        try:
+            _on_file(path)
+        except Busy:
+            continue  # not marked seen: imported at a next look, once the sync is done
+        except Exception as e:  # shown in the guide
+            state.update(last=str(path), error=errors.describe(e)[0])
+        else:
+            state.update(last=str(path), error=None)
+        events.publish('watch', {'last': state['last'], 'error': state['error']})
+        seen.add(key)

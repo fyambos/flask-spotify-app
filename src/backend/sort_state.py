@@ -106,9 +106,17 @@ def plan_sync(catalog, config=None):
     changes = []
     for entry in config['playlists']:
         s = state.get(entry['id']) or {}
+        if entry.get('playlist_id') and entry['playlist_id'] not in catalog['playlists']:
+            # Deleted on Spotify (or not given this time): nothing is written to it, and its songs
+            # are not taken for removed by hand.
+            if s.get('added') or s.get('base'):
+                changes.append({'entry_id': entry['id'], 'name': entry['name'], 'create': False, 'missing': True,
+                                'to_add': [], 'removed_on_spotify': []})
+            continue
         remote = set((catalog['playlists'].get(entry.get('playlist_id') or '') or {}).get('track_ids', []))
         base = set(s['base']) if s.get('base') is not None else None
-        removed = sorted(base - remote) if base is not None else []
+        # After an incomplete read of Spotify, nothing counts as removed.
+        removed = sorted(base - remote) if base is not None and not catalog.get('partial') else []
         to_add = [t for t in s.get('added', []) if t not in remote and t not in removed]
         create = not entry.get('playlist_id')
         if to_add or removed or (create and s.get('added')):
@@ -134,6 +142,8 @@ def push(sp, catalog, progress=None):
         s = _entry_state(state, entry['id'])
         change = changes.get(entry['id'])
         remote = list((catalog['playlists'].get(entry.get('playlist_id') or '') or {}).get('track_ids', []))
+        if change and change.get('missing'):
+            continue  # kept as it is until the playlist is back on Spotify
         if change:
             progress(step=f"Writing {entry['name']} on Spotify", done=i, total=len(config['playlists']))
             if change['create']:
@@ -165,18 +175,22 @@ def take_spotify_as_base(catalog, config=None):
 
 
 def _rename_playlist_id(config, entry, new_id):
-    """An app-only playlist now exists on Spotify: use its Spotify id everywhere."""
+    """An app-only playlist now exists on Spotify: use its Spotify id everywhere. The settings are read
+    again here: changes made in Settings during the sync are kept."""
     old = playlist_key(entry)
     entry['playlist_id'] = new_id
-    download = config['download']
-    download['playlists'] = [new_id if p == old else p for p in download['playlists']]
-    download['seen'] = [new_id if p == old else p for p in download.get('seen', [])]
-    config['sort_from'] = [new_id if p == old else p for p in config.get('sort_from', [])]
-    config['layout']['order'] = [new_id if p == old else p for p in config['layout'].get('order', [])]
-    folders = config.get('playlist_folders') or {}
-    if old in folders:
-        folders[new_id] = folders.pop(old)
-    config_store.save_config(config)
+    with config_store.editing() as current:
+        for e in current['playlists']:
+            if e['id'] == entry['id']:
+                e['playlist_id'] = new_id
+        download = current['download']
+        download['playlists'] = [new_id if p == old else p for p in download['playlists']]
+        download['seen'] = [new_id if p == old else p for p in download.get('seen', [])]
+        current['sort_from'] = [new_id if p == old else p for p in current.get('sort_from', [])]
+        current['layout']['order'] = [new_id if p == old else p for p in current['layout'].get('order', [])]
+        folders = current.get('playlist_folders') or {}
+        if old in folders:
+            folders[new_id] = folders.pop(old)
 
 
 def catalog_view():

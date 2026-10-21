@@ -45,13 +45,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearInterval(this.poll);
-    clearInterval(this.ticker);
   }
 
   refresh(): void {
     this.playlistService.getLibrary().subscribe(state => {
       this.state = state;
-      this.trackStarted();
+      this.trackDone();
       if (!this.importPath) {
         this.importPath = state.music_dir;
       }
@@ -111,27 +110,21 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.playlistService.revealLibrary().subscribe();
   }
 
-  /** Songs shown next to the step: each started song in turn, the last one stays until the next starts. */
-  private started: string[] = [];
-  private songIndex = 0;
-  private ticker: any = setInterval(() => {
-    if (this.songIndex < this.started.length - 1) this.songIndex++;
-  }, 1500);
+  /** The song that was downloaded last (it left the songs in progress). */
+  currentSong = '';
+  private previous: string[] = [];
 
-  private trackStarted(): void {
+  private trackDone(): void {
     const job = this.state?.job;
-    if (!job?.running) {
-      this.started = [];
-      this.songIndex = 0;
+    if (!job?.running || job.step !== 'Downloading songs') {
+      this.previous = [];
+      this.currentSong = '';
       return;
     }
-    for (const name of job.current || []) {
-      if (!this.started.includes(name)) this.started.push(name);
-    }
-  }
-
-  get currentSong(): string {
-    return this.started[this.songIndex] || '';
+    const current = job.current || [];
+    const done = this.previous.filter(name => !current.includes(name));
+    if (done.length) this.currentSong = done[done.length - 1];
+    this.previous = current;
   }
 
   get list() {

@@ -230,22 +230,32 @@ def _forget_snapshots():
         _snapshots['at'] = 0
 
 
+def _changed(playlist_id=None):
+    """A playlist (None: Liked Songs) the app just wrote to: read again next time, even if Spotify
+    still gives its old snapshot or its old count."""
+    _forget_snapshots()
+    with _lock:
+        cache = _load_cache()
+        if (cache['playlists'].pop(playlist_id, None) if playlist_id else cache.pop('liked', None)):
+            _save_cache(cache)
+
+
 def add_to_playlist(sp, playlist_id, track_ids, position=None):
     """Add at the end, or from a place in the playlist (0 is first)."""
-    _forget_snapshots()
     uris = [f'spotify:track:{tid}' for tid in track_ids]
     for i in range(0, len(uris), 100):
         payload = {'uris': uris[i:i + 100]}
         if position is not None:
             payload['position'] = position + i
         sp._post(f'playlists/{playlist_id}/items', payload=payload)
+    _changed(playlist_id)
 
 
 def remove_from_playlist(sp, playlist_id, track_ids):
-    _forget_snapshots()
     uris = [{'uri': f'spotify:track:{tid}'} for tid in track_ids]
     for i in range(0, len(uris), 100):
         sp._delete(f'playlists/{playlist_id}/items', payload={'items': uris[i:i + 100]})
+    _changed(playlist_id)
 
 
 def like_tracks(sp, track_ids):
@@ -253,6 +263,7 @@ def like_tracks(sp, track_ids):
     uris = [f'spotify:track:{tid}' for tid in track_ids]
     for i in range(0, len(uris), 40):
         sp._put('me/library', uris=','.join(uris[i:i + 40]))
+    _changed()
 
 
 def unlike_tracks(sp, track_ids):
@@ -260,6 +271,7 @@ def unlike_tracks(sp, track_ids):
     uris = [f'spotify:track:{tid}' for tid in track_ids]
     for i in range(0, len(uris), 40):
         sp._delete('me/library', uris=','.join(uris[i:i + 40]))
+    _changed()
 
 
 def create_playlist(sp, name):

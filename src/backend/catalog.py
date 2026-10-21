@@ -137,8 +137,9 @@ def refresh_from_spotify(sp, progress=None):
     old = load()
     progress(step='Reading your Liked Songs')
     liked = liked_tracks(sp)
-    tracks = {t['id']: t for t in liked}
-    playlists = {LIKED_ID: {'name': LIKED_NAME, 'owned': True, 'track_ids': [t['id'] for t in liked]}}
+    tracks = {t['id']: _without_date(t) for t in liked}
+    playlists = {LIKED_ID: {'name': LIKED_NAME, 'owned': True, 'track_ids': [t['id'] for t in liked],
+                            'added': [t.get('added_at') for t in liked]}}
 
     me = spotify_me(sp)['id']
     listing = my_playlists(sp)
@@ -169,9 +170,12 @@ def refresh_from_spotify(sp, progress=None):
                 unreadable.append(name)
             total = len(items)
         for t in items:
-            tracks.setdefault(t['id'], t)
+            tracks.setdefault(t['id'], _without_date(t))
+        # When each song was added (Stats): from Spotify, else as read before.
+        added = [t.get('added_at') for t in items] if any(t.get('added_at') for t in items) \
+            else (old.get('playlists', {}).get(p['id']) or {}).get('added')
         images = p.get('images') or []
-        playlists[p['id']] = {'name': name, 'owned': owned, 'track_ids': [t['id'] for t in items],
+        playlists[p['id']] = {'name': name, 'owned': owned, 'track_ids': [t['id'] for t in items], 'added': added,
                               'owner': (p.get('owner') or {}).get('display_name'),
                               'image_url': images[0]['url'] if images else None, 'total': total}
 
@@ -180,6 +184,11 @@ def refresh_from_spotify(sp, progress=None):
         catalog.update(partial=True, unreadable=unreadable)
     _save(catalog, keep_previous=old.get('source') != 'spotify')
     return catalog
+
+
+def _without_date(track):
+    """A song as the catalog keeps it: its date of addition belongs to each playlist ('added')."""
+    return {k: v for k, v in track.items() if k != 'added_at'}
 
 
 def from_last_check():
@@ -259,6 +268,7 @@ def import_file(path):
 
     old = load()
     playlists = _reuse_ids(playlists, old)
+    save_extras(tracks)
     tracks = _known_details(tracks, old)
     catalog = {'source': kind, 'updated_at': _now(), 'file': Path(path).name, 'playlists': playlists, 'tracks': tracks}
     _save(catalog, keep_previous=True)
@@ -316,14 +326,17 @@ def _uri_id(uri):
 def _read_spotify_export(path):
     playlists, tracks = {}, {}
 
-    def add(key, name, owned, title, artist, album, uri):
+    def add(key, name, owned, title, artist, album, uri, added=None):
         if not title:
             return
         tid = _track_id(_uri_id(uri), None, artist or '', title)
         tracks.setdefault(tid, _file_track(tid, title, artist or '', album or '', None))
-        playlist = playlists.setdefault(key, {'name': name, 'owned': owned, 'track_ids': []})
+        playlist = playlists.setdefault(key, {'name': name, 'owned': owned, 'track_ids': [], 'added': []})
         if tid not in playlist['track_ids']:
             playlist['track_ids'].append(tid)
+            playlist['added'].append(added)
+
+    listened = []  # the listening history the export may include (Stats)
 
     with zipfile.ZipFile(path) as z:
         for member in z.namelist():
@@ -339,7 +352,18 @@ def _read_spotify_export(path):
                     for item in p.get('items', []):
                         t = item.get('track') or {}
                         add('name:' + name, name, True, t.get('trackName'), t.get('artistName'),
-                            t.get('albumName'), t.get('trackUri'))
+                            t.get('albumName'), t.get('trackUri'), item.get('addedDate'))
+            elif re.match(r'(Streaming_History_Audio|StreamingHistory_music|StreamingHistory)\S*\.json$', base):
+                for e in json.loads(z.read(member).decode('utf-8')):
+                    # Account data: endTime, artistName, trackName, msPlayed. Extended history: ts,
+                    # master_metadata_album_artist_name, master_metadata_track_name, ms_played.
+                    artist = e.get('artistName') or e.get('master_metadata_album_artist_name')
+                    title = e.get('trackName') or e.get('master_metadata_track_name')
+                    if artist and title:
+                        listened.append({'at': e.get('endTime') or e.get('ts'), 'artist': artist, 'title': title,
+                                         'ms': e.get('msPlayed') or e.get('ms_played') or 0})
+    if listened:
+        LISTENING_PATH.write_text(json.dumps(listened, ensure_ascii=False), encoding='utf-8')
     return playlists, tracks
 
 
@@ -356,7 +380,9 @@ def _known_details(tracks, old):
         for t in entry.get('tracks') or []:
             if (t.get('album') or {}).get('artists'):
                 known.setdefault(t['id'], t)
-    return {tid: known.get(tid, track) for tid, track in tracks.items()}
+    kept = ('popularity', 'genres', 'features')  # what a file can have that Spotify no longer gives
+    return {tid: {**known[tid], **{k: track[k] for k in kept if track.get(k)}} if tid in known else track
+            for tid, track in tracks.items()}
 
 
 def _read_exportify(path):
@@ -380,7 +406,7 @@ def _read_exportify(path):
         added_by = {r.get('Added By') for r in items if r.get('Added By')}
         owned = True if key == LIKED_ID or (me and me in added_by) else (False if me and added_by else None)
         playlist = playlists.setdefault(key, {'name': LIKED_NAME if key == LIKED_ID else clean_name(title),
-                                              'owned': owned, 'track_ids': []})
+                                              'owned': owned, 'track_ids': [], 'added': []})
         for r in items:
             tid = _uri_id(r.get('Track URI'))
             if not tid or not r.get('Track Name'):
@@ -391,9 +417,52 @@ def _read_exportify(path):
             track['artists'] = [{'id': None, 'name': a} for a in artists]
             track['duration_ms'] = int(r['Duration (ms)']) if (r.get('Duration (ms)') or '').isdigit() else None
             track['album']['release_date'] = r.get('Release Date') or None
+            # For Stats: Exportify still has what Spotify no longer gives to new apps.
+            track['popularity'] = int(r['Popularity']) if (r.get('Popularity') or '').isdigit() else None
+            track['genres'] = [g for g in (r.get('Genres') or '').split(',') if g]
+            track['features'] = _features(r)
             tracks.setdefault(tid, track)
             playlist['track_ids'].append(tid)  # a song twice in a playlist stays twice, as on Spotify
+            playlist['added'].append(r.get('Added At') or None)
     return playlists, tracks
+
+
+EXTRAS_PATH = DATA_DIR / 'track-extras.json'
+LISTENING_PATH = DATA_DIR / 'listening-history.json'  # from the Spotify data export, when it has it
+
+
+def save_extras(tracks):
+    """Genres, mood and popularity from an export (Exportify), kept apart: Stats uses them even when the
+    playlists are read from Spotify again, which no longer gives them."""
+    extras = load_extras()
+    for tid, track in tracks.items():
+        found = {k: track[k] for k in ('popularity', 'genres', 'features') if track.get(k)}
+        if found:
+            extras[tid] = {**extras.get(tid, {}), **found}
+    if extras:
+        EXTRAS_PATH.write_text(json.dumps(extras, ensure_ascii=False), encoding='utf-8')
+
+
+def load_extras():
+    try:
+        return json.loads(EXTRAS_PATH.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+
+
+FEATURES = {'danceability': 'Danceability', 'energy': 'Energy', 'valence': 'Valence', 'tempo': 'Tempo',
+            'acousticness': 'Acousticness', 'instrumentalness': 'Instrumentalness', 'mode': 'Mode', 'key': 'Key'}
+
+
+def _features(row):
+    """Spotify's audio features of a song (mood, energy, tempo...) from an Exportify row, None without them."""
+    values = {}
+    for key, column in FEATURES.items():
+        try:
+            values[key] = float(row[column])
+        except (KeyError, TypeError, ValueError):
+            pass
+    return values or None
 
 
 def _reuse_ids(playlists, old):

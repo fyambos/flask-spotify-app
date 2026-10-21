@@ -2,16 +2,21 @@
 <p class="page-subtitle">Organize your songs into playlists. Changes won't affect Spotify until you save them.</p>
 
 <!-- What is sorted, and where to -->
-<div *ngIf="config_loaded" class="card mt-6 grid gap-5 p-5 sm:grid-cols-[1fr_auto_1fr]">
+<div *ngIf="config_loaded" class="card mt-6 grid gap-6 p-6 lg:grid-cols-[minmax(0,16rem)_auto_minmax(0,1fr)]">
   <div class="min-w-0">
     <div class="text-sm font-semibold">Sort from</div>
-    <div class="mt-3 flex flex-wrap gap-1.5">
-      <span *ngFor="let id of sources" class="chip gap-1 bg-zinc-900 py-1 pl-3 pr-1.5 text-white">
-        {{ sourceName(id) }}
-        <button *ngIf="sources.length > 1" (click)="removeSource(id)" class="inline-flex rounded-full p-0.5 hover:bg-white/20" aria-label="Remove">
-          <lucide-icon name="x" [size]="12"></lucide-icon>
+    <div class="mt-3 space-y-2">
+      <div *ngFor="let id of sources" class="group flex items-center gap-3 rounded-xl bg-zinc-50 p-2 pr-3">
+        <img *ngIf="coverOf(id)" [src]="coverOf(id)" alt="" class="h-12 w-12 rounded-lg object-cover" />
+        <div *ngIf="!coverOf(id)" class="flex h-12 w-12 items-center justify-center rounded-lg text-white"
+             [ngClass]="id === 'liked' ? 'bg-gradient-to-br from-indigo-600 via-violet-500 to-sky-300' : 'bg-zinc-200 text-zinc-400'">
+          <lucide-icon [name]="id === 'liked' ? 'heart' : 'music-2'" [size]="20"></lucide-icon>
+        </div>
+        <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ sourceName(id) }}</span>
+        <button *ngIf="sources.length > 1" (click)="removeSource(id)" class="icon-btn h-7 w-7 opacity-0 group-hover:opacity-100" aria-label="Remove">
+          <lucide-icon name="x" [size]="14"></lucide-icon>
         </button>
-      </span>
+      </div>
     </div>
     <select class="input mt-3 rounded-full py-1.5 text-sm" [(ngModel)]="addingSource" (ngModelChange)="addSource($event)">
       <option value="" disabled>+ Add a playlist to sort</option>
@@ -19,7 +24,7 @@
     </select>
   </div>
 
-  <span class="hidden items-center text-zinc-300 sm:flex"><lucide-icon name="arrow-right" [size]="22"></lucide-icon></span>
+  <span class="hidden items-center text-zinc-300 lg:flex"><lucide-icon name="arrow-right" [size]="24"></lucide-icon></span>
 
   <div class="min-w-0">
     <div class="flex items-center justify-between gap-3">
@@ -28,11 +33,22 @@
         <lucide-icon name="list-music" [size]="15"></lucide-icon> Playlists &amp; rules
       </a>
     </div>
-    <div class="mt-3 flex flex-wrap gap-1.5">
-      <span *ngFor="let p of playlists" class="chip py-1">{{ p.name }}</span>
-      <span *ngIf="!playlists.length" class="text-sm text-zinc-400">None yet.</span>
+    <div class="mt-3 grid grid-cols-3 gap-3 sm:grid-cols-5 xl:grid-cols-7">
+      <button *ngFor="let p of playlists" type="button" class="group min-w-0 text-left"
+              (click)="filter = 'planned'; genreFilter = genreFilter === p.id ? '' : p.id">
+        <div class="relative aspect-square overflow-hidden rounded-xl ring-2 transition"
+             [ngClass]="genreFilter === p.id && filter === 'planned' ? 'ring-brand-500' : 'ring-transparent group-hover:shadow-lift'">
+          <img *ngIf="coverOf(p.playlist_id)" [src]="coverOf(p.playlist_id)" alt="" loading="lazy" class="h-full w-full object-cover" />
+          <div *ngIf="!coverOf(p.playlist_id)" class="flex h-full w-full items-center justify-center bg-zinc-100 text-zinc-300">
+            <lucide-icon name="music-2" [size]="22"></lucide-icon>
+          </div>
+          <span *ngIf="plannedIn(p.id)" class="absolute right-1.5 top-1.5 rounded-full bg-brand-500 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white shadow-soft">+{{ plannedIn(p.id) }}</span>
+        </div>
+        <div class="mt-1.5 truncate text-xs font-medium">{{ p.name }}</div>
+      </button>
+      <span *ngIf="!playlists.length" class="col-span-full text-sm text-zinc-400">None yet.</span>
     </div>
-    <div *ngIf="!creatingInto" class="mt-3 flex flex-wrap items-center gap-2">
+    <div *ngIf="!creatingInto" class="mt-4 flex flex-wrap items-center gap-2">
       <select class="input min-w-0 flex-1 rounded-full py-1.5 text-sm" [(ngModel)]="addingInto" (ngModelChange)="addInto($event)">
         <option value="" disabled>+ Add a playlist to sort into</option>
         <option value="__new">New playlist</option>
@@ -40,7 +56,7 @@
       </select>
       <a *ngIf="!playlists.length" routerLink="/setup" [queryParams]="{ step: 'choose' }" class="btn-primary px-3 py-1.5 text-sm">Choose playlists</a>
     </div>
-    <form *ngIf="creatingInto" class="mt-3 flex flex-wrap items-center gap-2" (ngSubmit)="createInto()">
+    <form *ngIf="creatingInto" class="mt-4 flex flex-wrap items-center gap-2" (ngSubmit)="createInto()">
       <input class="input min-w-0 flex-1 py-1.5" name="newInto" [(ngModel)]="newIntoName" placeholder="Playlist name" autofocus />
       <button class="btn-primary px-3 py-1.5" type="submit" [disabled]="!newIntoName.trim()">Create</button>
       <button class="btn-ghost px-3 py-1.5" type="button" (click)="creatingInto = false">Cancel</button>
@@ -87,14 +103,33 @@
   </ng-container>
 </div>
 
-<div *ngIf="state?.preview && playlists.length" class="mt-6 flex flex-wrap items-center justify-end gap-2">
-    <button class="btn-outline" (click)="startPreview()" [disabled]="state?.job?.running">
-      <lucide-icon name="refresh-cw" [size]="16" [class.animate-spin]="state?.job?.running"></lucide-icon> Re-analyse
+<!-- Duplicates in Spotify -->
+<div *ngIf="duplicates.length && status?.spotify?.connected && !status?.spotify?.limit" class="card mt-4 p-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="font-semibold">Duplicates in Spotify</h2>
+      <p class="mt-1 text-sm text-zinc-500">{{ duplicates.length }} songs are in a playlist twice.</p>
+    </div>
+    <button class="btn-brand" [disabled]="removingDuplicates" (click)="removeDuplicates()">
+      <span class="inline-flex animate-spin"><lucide-icon *ngIf="removingDuplicates" name="loader-2" [size]="16"></lucide-icon></span>
+      Remove duplicates
     </button>
-    <button class="btn-brand" (click)="apply()" [disabled]="state?.job?.running || applying || !count('planned')">
-      <span class="inline-flex animate-spin"><lucide-icon *ngIf="applying" name="loader-2" [size]="16"></lucide-icon></span>
-      {{ applying ? 'Saving…' : spotifyReady ? 'Add ' + count('planned') + ' to Spotify' : 'Save ' + count('planned') }}
-    </button>
+  </div>
+  <ul class="mt-4 max-h-96 divide-y divide-zinc-100 overflow-y-auto pr-1 text-sm" [class.opacity-60]="removingDuplicates">
+    <li *ngFor="let d of duplicates; trackBy: duplicateKey" class="flex items-center gap-3 py-2.5">
+      <img *ngIf="d.keep.image" [src]="d.keep.image" alt="" loading="lazy" class="h-10 w-10 shrink-0 rounded-md object-cover" />
+      <div *ngIf="!d.keep.image" class="h-10 w-10 shrink-0 rounded-md bg-zinc-100"></div>
+      <div class="min-w-0 flex-1">
+        <div class="truncate"><span class="font-medium">{{ d.keep.title }}</span> · {{ d.keep.artist }} <span class="text-zinc-500">— {{ d.playlist }}</span></div>
+        <div *ngIf="d.kind === 'versions'" class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-zinc-500">
+          <span *ngIf="singleAndAlbum(d)" class="chip py-0">Single and album</span>
+          <span>{{ d.keep.album }}</span>
+          <span *ngFor="let s of d.remove" class="line-through decoration-zinc-400">{{ s.album }}</span>
+        </div>
+      </div>
+      <button class="btn-ghost shrink-0 px-3 py-1.5" [disabled]="removingDuplicates" (click)="keepBoth(d)">Keep both</button>
+    </li>
+  </ul>
 </div>
 
 <!-- Progress -->
@@ -130,32 +165,8 @@
 </div>
 
 <ng-container *ngIf="state?.preview && playlists.length">
-  <!-- Summary -->
-  <div class="mt-6 grid gap-3 sm:grid-cols-3">
-    <div class="card p-5">
-      <div class="label">To review</div>
-      <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ count('review') }}</div>
-    </div>
-    <div class="card p-5">
-      <div class="label">Ready to add</div>
-      <div class="mt-1.5 text-2xl font-semibold tracking-tight text-brand-600">{{ count('planned') }}</div>
-    </div>
-    <div class="card p-5">
-      <div class="label">Already sorted</div>
-      <div class="mt-1.5 text-2xl font-semibold tracking-tight text-zinc-400">{{ count('already') }}</div>
-    </div>
-  </div>
-
-  <div *ngIf="distribution.length" class="mt-3 flex flex-wrap gap-1.5">
-    <button *ngFor="let d of distribution" (click)="filter = 'planned'; genreFilter = genreFilter === d.id ? '' : d.id"
-            class="chip px-3 py-1 transition hover:bg-zinc-200"
-            [ngClass]="genreFilter === d.id && filter === 'planned' ? 'bg-zinc-900 text-white hover:bg-zinc-700' : ''">
-      {{ d.name }} <span class="opacity-60">+{{ d.planned }}</span>
-    </button>
-  </div>
-
-  <!-- Toolbar -->
-  <div class="mt-8 flex flex-wrap items-center gap-3">
+  <!-- Toolbar, kept in view while scrolling the songs -->
+  <div class="sticky top-0 z-20 -mx-2 mt-6 flex flex-wrap items-center gap-3 bg-zinc-50/85 px-2 py-3 backdrop-blur">
     <div class="inline-flex rounded-full bg-zinc-100 p-1 text-sm">
       <button *ngFor="let t of tabs" (click)="filter = t.id"
               class="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-medium transition"
@@ -163,17 +174,24 @@
         {{ t.label }} <span class="tabular-nums text-zinc-400">{{ count(t.id) }}</span>
       </button>
     </div>
-    <div class="relative min-w-[12rem] flex-1">
+    <div class="relative min-w-[15rem] flex-1">
       <span class="inline-flex pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"><lucide-icon name="search" [size]="16"></lucide-icon></span>
       <input class="input rounded-full pl-10" [(ngModel)]="search" placeholder="Search songs, artists, albums" />
     </div>
+    <button class="icon-btn h-10 w-10 bg-white ring-1 ring-zinc-200" (click)="startPreview()" [disabled]="state?.job?.running" title="Re-analyse" aria-label="Re-analyse">
+      <lucide-icon name="refresh-cw" [size]="16" [class.animate-spin]="state?.job?.running"></lucide-icon>
+    </button>
+    <button class="btn-brand" (click)="apply()" [disabled]="state?.job?.running || applying || !count('planned')">
+      <span class="inline-flex animate-spin"><lucide-icon *ngIf="applying" name="loader-2" [size]="16"></lucide-icon></span>
+      {{ applying ? 'Saving…' : spotifyReady ? 'Add ' + count('planned') + ' to Spotify' : 'Save ' + count('planned') }}
+    </button>
   </div>
 
   <!-- List -->
-  <ul class="card mt-4 divide-y divide-zinc-100 overflow-hidden">
-    <li *ngFor="let item of visibleItems" class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:flex-nowrap">
-      <img *ngIf="item.image_url" [src]="item.image_url" alt="" loading="lazy" class="h-11 w-11 shrink-0 rounded-lg object-cover ring-1 ring-zinc-900/5" />
-      <div *ngIf="!item.image_url" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300">
+  <ul class="card mt-2 divide-y divide-zinc-100 overflow-hidden">
+    <li *ngFor="let item of visibleItems; trackBy: trackByItem" class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 hover:bg-zinc-50/60 sm:flex-nowrap">
+      <img *ngIf="item.image_url" [src]="item.image_url" alt="" loading="lazy" class="h-12 w-12 shrink-0 rounded-lg object-cover shadow-soft" />
+      <div *ngIf="!item.image_url" class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300">
         <lucide-icon name="music-2" [size]="16"></lucide-icon>
       </div>
 
@@ -188,8 +206,14 @@
       <!-- Placed songs -->
       <div *ngIf="filter !== 'review'" class="flex shrink-0 flex-col items-end gap-0.5 text-right">
         <div class="flex flex-wrap justify-end gap-1">
-          <span class="chip bg-zinc-900 text-white">{{ playlistName(item.playlist) }}</span>
-          <span *ngFor="let extra of item.also || []" class="chip">+ {{ playlistName(extra) }}</span>
+          <span class="chip gap-1.5 bg-zinc-900 py-0.5 pl-0.5 text-white">
+            <img *ngIf="entryCover(item.playlist)" [src]="entryCover(item.playlist)" alt="" class="h-5 w-5 rounded-full object-cover" />
+            {{ playlistName(item.playlist) }}
+          </span>
+          <span *ngFor="let extra of item.also || []" class="chip gap-1.5 py-0.5 pl-0.5">
+            <img *ngIf="entryCover(extra)" [src]="entryCover(extra)" alt="" class="h-5 w-5 rounded-full object-cover" />
+            + {{ playlistName(extra) }}
+          </span>
         </div>
         <span class="max-w-[16rem] truncate text-xs text-zinc-400" [title]="item.reason">{{ item.reason }}</span>
       </div>

@@ -60,6 +60,26 @@ export interface LikeItem {
   reason: string;
 }
 
+/** A downloaded playlist: how many of its songs have a file. */
+export interface LibraryPlaylist {
+  id: string;
+  name: string;
+  songs: number;
+  downloaded: number;
+  image_url: string | null;
+}
+
+export interface LibrarySong {
+  track_id: string;
+  title: string;
+  artists: string[];
+  album: string;
+  image_url: string | null;
+  duration: string;
+  /** pending: downloaded at the next Sync. */
+  status: 'ok' | 'failed' | 'ignored' | 'pending';
+}
+
 export interface SpotifyPlaylist {
   id: string;
   name: string;
@@ -89,6 +109,25 @@ export interface ImportState {
   result: { kind: string; file: string; songs: number; playlists: number; songs_added: number; songs_removed: number;
             playlists_added: string[]; first?: boolean; synced?: boolean; to_download?: number } | null;
   watch: { last: string | null; error: string | null };
+}
+
+export interface DuplicateSong {
+  id: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  album_type: string | null;
+  image: string | null;
+}
+
+/** A song added twice to a playlist, or two versions of one song: `keep` stays, `remove` goes. */
+export interface SpotifyDuplicate {
+  key: string;
+  playlist_id: string;
+  playlist: string;
+  kind: 'twice' | 'versions';
+  keep: DuplicateSong;
+  remove: DuplicateSong[];
 }
 
 export interface SpotifySyncChange {
@@ -386,5 +425,22 @@ export class PlaylistService {
   }
   runSpotifySync(): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/sort/spotify`, {});
+  }
+
+  getLibraryPlaylists(): Observable<LibraryPlaylist[]> {
+    return this.http.get<LibraryPlaylist[]>(`${this.apiUrl}/library/playlists`);
+  }
+  getLibraryPlaylist(id: string): Observable<{ id: string; name: string; songs: LibrarySong[] }> {
+    return this.http.get<{ id: string; name: string; songs: LibrarySong[] }>(`${this.apiUrl}/library/playlists/${id}`);
+  }
+
+  getDuplicates(): Observable<{ duplicates: SpotifyDuplicate[]; job: JobState }> {
+    return this.http.get<{ duplicates: SpotifyDuplicate[]; job: JobState }>(`${this.apiUrl}/sort/duplicates`);
+  }
+  removeDuplicates(keys: string[]): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/sort/duplicates`, { keys });
+  }
+  keepBoth(key: string): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/sort/duplicates/keep`, { key });
   }
 }

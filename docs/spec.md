@@ -29,11 +29,11 @@ Rien n'est bloqué en entier. Chaque page dit ce qui lui manque, sans renvoyer v
 | Télécharger les playlists | oui | oui |
 | Playlists MP3, Apple Music, appareils | oui | oui |
 | Trier (Sort Playlists) | oui, écrit sur Spotify | oui, en local seulement |
-| Stats | oui | non (page masquée) |
+| Stats | oui (plus tes titres favoris et dernières écoutes) | oui (ce que le fichier contient, voir 14) |
 
 - **Premium** : depuis février 2026, le propriétaire d'une app développeur Spotify doit avoir Premium. Chaque personne crée sa propre app.
 - **Pas d'API client Spotify** (celle du lecteur web) : contraire aux conditions de Spotify, risque de suspension du compte.
-- **Pas d'ytmusicapi** : risque de ban YouTube.
+- **ytmusicapi sans compte seulement** (recherches publiques, comme spotdl) : connecté à un compte YouTube, il y a un risque de suspension.
 - **Pas d'automatisation du site TuneMyMusic** : pas d'API, et ce serait contourner leurs limites.
 
 ## 3. Premier démarrage
@@ -51,7 +51,7 @@ Changement à prévoir : l'étape « clés absentes » ne doit plus être la seu
 
 ## 4. Menu
 
-Home, Library, Sort Playlists, Stats (seulement si Spotify est connecté), Settings.
+Home, Library, Sort Playlists, Stats (dès qu'il y a des playlists, quelle que soit leur source), Settings.
 
 ## 5. Home
 
@@ -219,6 +219,22 @@ Un seul comportement, avec ou sans Premium :
 - Import de fichiers existants.
 - Dossiers de playlists pour Apple Music et les `.m3u8` (Settings).
 - Library : « Find downloads here: <chemin> ».
+
+## 14. Stats
+
+Ce que les playlists disent de tes goûts, avec ce que l'app a : Spotify, un export Exportify ou Spotify, un fichier TuneMyMusic avec les genres Last.fm. Une partie sans données n'est pas affichée. En haut : « All playlists » ou une playlist.
+
+1. « In short » : « {n} songs · {n} artists · {n} hours of music ».
+2. « Your artists » : les 10 premiers en barres, puis « {n}% of your artists have only one song here. »
+3. « Your genres » : les 10 premiers, puis « Your rarest genres » (genres de Spotify ou d'Exportify présents sur une seule chanson ; les étiquettes Last.fm sont du texte libre).
+4. « Your years » : chansons par année de sortie, « Most of your songs came out between {a} and {b}. » (20 % à 80 % des chansons), « Your oldest songs ».
+5. « When you add songs » : chansons par mois, « Your busiest month: {mois}, {n} songs. »
+6. « Hits or discoveries » : Hits (popularité 70 et plus), Known (40 à 69), Discoveries (moins de 40), « Your least known songs ».
+7. « Mood » (caractéristiques audio, seulement Exportify) : barres « Sad – Happy », « Calm – Energetic », « Not for dancing – Danceable », « Electronic – Acoustic », avec la moyenne et 3 chansons à chaque bout ; « {n}% of your songs are in a minor key. » ; « Most of your songs are around {n} BPM (slow/medium/fast). »
+8. « Song length » : « Your songs last {m:ss} on average. », « Your longest songs ».
+9. « What you listen to » : avec Spotify, « All-time top » et « Recently played » ; avec l'historique de l'export de données Spotify, les heures d'écoute, les artistes les plus écoutés et les heures de la journée.
+
+Données gardées pour Stats : date d'ajout (par playlist) et popularité depuis Spotify ; genres, popularité et caractéristiques audio d'Exportify dans `track-extras.json`, utilisés quelle que soit la source des playlists ; historique d'écoute de l'export Spotify dans `listening-history.json`.
 
 ## 13. Livraison
 

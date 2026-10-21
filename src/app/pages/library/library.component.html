@@ -6,102 +6,172 @@
       <button type="button" (click)="reveal()" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:decoration-zinc-500">{{ state.music_dir }}</button>.
     </p>
   </div>
-  <a *ngIf="fromFile" routerLink="/import" class="btn-outline">
-    <lucide-icon name="download" [size]="15"></lucide-icon> Import playlists
-  </a>
+  <div class="flex items-center gap-2">
+    <a *ngIf="fromFile" routerLink="/import" class="btn-outline">
+      <lucide-icon name="download" [size]="15"></lucide-icon> Import playlists
+    </a>
+    <a routerLink="/settings" fragment="layout" class="btn-outline" title="File layout">
+      <lucide-icon name="folder-tree" [size]="15"></lucide-icon> {{ layoutLabel }}
+    </a>
+  </div>
 </div>
 
-<!-- Next sync -->
-<section *ngIf="state" class="card mt-6 p-6">
-  <ng-container *ngIf="state.job.running">
+<!-- Your library, and the next sync -->
+<section *ngIf="state" class="relative mt-6 overflow-hidden rounded-2xl bg-zinc-900 text-white">
+  <div class="absolute inset-y-0 right-0 flex w-3/5 flex-wrap content-start justify-end overflow-hidden opacity-40 [mask-image:linear-gradient(to_right,transparent,black_60%)]">
+    <img *ngFor="let cover of covers" [src]="cover" alt="" class="h-[110px] w-[110px] object-cover" />
+  </div>
+  <div class="relative flex flex-wrap items-end justify-between gap-6 p-7">
+    <div>
+      <div class="flex flex-wrap gap-x-10 gap-y-3">
+        <div><div class="text-5xl font-semibold tabular-nums">{{ state.downloaded }}</div><div class="mt-1 text-sm text-zinc-300">songs</div></div>
+        <div><div class="text-5xl font-semibold tabular-nums">{{ state.playlists }}</div><div class="mt-1 text-sm text-zinc-300">playlists</div></div>
+      </div>
+      <div *ngIf="!state.job.running" class="mt-6 text-sm">
+        <ng-container *ngIf="state.plan as plan">
+          <div class="font-medium">Next sync</div>
+          <div class="mt-1 flex flex-wrap gap-x-5 gap-y-1">
+            <span><span class="font-semibold tabular-nums">{{ plan.to_download }}</span>&nbsp;<span class="text-zinc-300">to download</span></span>
+            <span><span class="font-semibold tabular-nums">{{ plan.to_move }}</span>&nbsp;<span class="text-zinc-300">to move</span></span>
+            <span><span class="font-semibold tabular-nums">{{ plan.to_remove }}</span>&nbsp;<span class="text-zinc-300">removed</span></span>
+          </div>
+          <div class="mt-1 text-xs text-zinc-400">Checked {{ plan.generated_at | date:'d MMM, HH:mm' }}, playlists from {{ plan.file || 'Spotify' }}.</div>
+          <div *ngIf="plan.unreadable?.length" class="mt-1 text-xs text-amber-300">
+            Spotify did not give {{ plan.unreadable.join(', ') }} this time. Their songs stay as they were.
+          </div>
+          <div *ngIf="upToDate" class="mt-1 font-medium text-brand-400">Everything up to date.</div>
+        </ng-container>
+        <div *ngIf="!state.plan" class="text-zinc-300">
+          <div class="font-medium text-white">Nothing downloaded yet</div>
+          Click Sync to see what will be downloaded.
+        </div>
+      </div>
+    </div>
+    <button *ngIf="!state.job.running" class="btn-brand px-6 py-2.5" (click)="sync()">
+      <lucide-icon name="download" [size]="16"></lucide-icon> Sync
+    </button>
+  </div>
+  <div *ngIf="state.job.running" class="relative border-t border-white/10 bg-black/30 px-7 py-4 backdrop-blur">
     <div class="flex items-center justify-between gap-4 text-sm">
       <span class="flex min-w-0 items-center gap-2">
         <span class="inline-flex shrink-0 animate-spin text-zinc-400"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span>
         <span class="shrink-0 font-medium">{{ state.job.step }}</span>
         <span *ngIf="currentSong" class="truncate text-xs text-zinc-400">{{ currentSong }}</span>
       </span>
-      <span *ngIf="state.job.total" class="shrink-0 tabular-nums text-zinc-500">{{ state.job.done }} / {{ state.job.total }}</span>
+      <span *ngIf="state.job.total" class="shrink-0 tabular-nums text-zinc-300">{{ state.job.done }} / {{ state.job.total }}</span>
     </div>
-    <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-      <div class="h-full rounded-full bg-zinc-900 transition-all duration-500"
+    <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-white/15">
+      <div class="h-full rounded-full bg-brand-500 transition-all duration-500"
            [style.width.%]="state.job.total ? 100 * (state.job.done || 0) / (state.job.total || 1) : 5"></div>
-    </div>
-  </ng-container>
-
-  <div *ngIf="!state.job.running" class="flex flex-wrap items-center justify-between gap-4">
-    <div *ngIf="state.plan as plan">
-      <div class="font-semibold">Next sync</div>
-      <div class="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm">
-        <span><span class="font-semibold tabular-nums">{{ plan.to_download }}</span>&nbsp;<span class="text-zinc-500">to download</span></span>
-        <span><span class="font-semibold tabular-nums">{{ plan.to_move }}</span>&nbsp;<span class="text-zinc-500">to move</span></span>
-        <span><span class="font-semibold tabular-nums">{{ plan.to_remove }}</span>&nbsp;<span class="text-zinc-500">removed</span></span>
-      </div>
-      <div class="mt-1 text-xs text-zinc-400">
-        Checked {{ plan.generated_at | date:'d MMM, HH:mm' }}, playlists from {{ plan.file || 'Spotify' }}.
-      </div>
-      <div *ngIf="plan.unreadable?.length" class="mt-1 text-xs text-amber-700">
-        Spotify did not give {{ plan.unreadable.join(', ') }} this time. Their songs stay as they were.
-      </div>
-      <div *ngIf="upToDate" class="mt-1 text-sm font-medium text-brand-600">Everything up to date.</div>
-    </div>
-    <div *ngIf="!state.plan" class="text-sm text-zinc-500">
-      <div class="font-semibold text-zinc-900">Nothing downloaded yet</div>
-      Click Sync to see what will be downloaded.
-    </div>
-    <div class="flex items-center gap-2">
-      <button class="btn-brand" (click)="sync()">
-        <lucide-icon name="download" [size]="15"></lucide-icon> Sync
-      </button>
     </div>
   </div>
 </section>
 <div *ngIf="state?.job?.error" class="mt-4 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700 ring-1 ring-rose-600/10">{{ state?.job?.error | errorText: state?.job?.error_params }}</div>
 
-<!-- Downloaded -->
-<section *ngIf="state" class="mt-4 grid gap-3 sm:grid-cols-3">
-  <div class="card p-5">
-    <div class="label">Downloaded</div>
-    <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ state.downloaded }}&nbsp;<span class="text-sm font-normal text-zinc-400">songs</span></div>
+<!-- Playlists -->
+<section *ngIf="playlists.length" class="mt-10">
+  <h2 class="text-lg font-semibold tracking-tight">Playlists</h2>
+  <div class="mt-4 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-4 lg:grid-cols-6">
+    <button *ngFor="let p of shownPlaylists" type="button" (click)="openPlaylist(p)" class="group min-w-0 self-start text-left">
+      <div class="relative aspect-square overflow-hidden rounded-xl shadow-soft ring-2 transition"
+           [ngClass]="open?.playlist?.id === p.id ? 'ring-brand-500' : 'ring-transparent group-hover:shadow-lift'">
+        <img *ngIf="p.image_url" [src]="p.image_url" alt="" loading="lazy" class="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" />
+        <div *ngIf="!p.image_url" class="flex h-full w-full items-center justify-center text-white"
+             [ngClass]="p.id === 'liked' ? 'bg-gradient-to-br from-indigo-600 via-violet-500 to-sky-300' : 'bg-zinc-200 text-zinc-400'">
+          <lucide-icon [name]="p.id === 'liked' ? 'heart' : 'music-2'" [size]="34"></lucide-icon>
+        </div>
+      </div>
+      <div class="mt-2 truncate text-sm font-medium">{{ p.name }}</div>
+      <div class="text-xs tabular-nums text-zinc-500">{{ p.songs }} songs</div>
+      <div *ngIf="p.downloaded < p.songs" class="mt-1.5 h-1 overflow-hidden rounded-full bg-zinc-200">
+        <div class="h-full rounded-full bg-brand-500" [style.width.%]="(100 * p.downloaded) / p.songs"></div>
+      </div>
+    </button>
+    <button *ngIf="morePlaylists" type="button" (click)="playlistLimit = playlistLimit + 12" class="group min-w-0 self-start text-left">
+      <div class="flex aspect-square items-center justify-center rounded-xl bg-zinc-100 text-sm font-medium text-zinc-600 transition group-hover:bg-zinc-200 group-hover:text-zinc-900">
+        Show {{ morePlaylists }} more
+      </div>
+    </button>
   </div>
-  <div class="card p-5">
-    <div class="label">Playlists</div>
-    <div class="mt-1.5 text-2xl font-semibold tracking-tight">{{ state.playlists }}</div>
-  </div>
-  <a routerLink="/settings" fragment="layout" class="card group p-5 transition hover:shadow-lift">
-    <div class="label">File layout</div>
-    <div class="mt-1.5 flex items-center justify-between gap-2">
-      <span class="text-lg font-semibold tracking-tight">{{ layoutLabel }}</span>
-      <span class="text-sm text-zinc-400 group-hover:text-zinc-900">Change</span>
+
+  <!-- The playlist open, in a panel over the page -->
+  <div *ngIf="open" class="fixed inset-0 z-40 bg-zinc-900/20 backdrop-blur-[2px]" (click)="open = null"></div>
+  <aside *ngIf="open" class="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-2xl">
+    <div class="flex items-center gap-5 border-b border-zinc-100 bg-gradient-to-b from-zinc-50 to-white p-5">
+      <img *ngIf="open.playlist.image_url" [src]="open.playlist.image_url" alt="" class="h-24 w-24 rounded-xl object-cover shadow-soft" />
+      <div *ngIf="!open.playlist.image_url" class="flex h-24 w-24 items-center justify-center rounded-xl text-white"
+           [ngClass]="open.playlist.id === 'liked' ? 'bg-gradient-to-br from-indigo-600 via-violet-500 to-sky-300' : 'bg-zinc-200 text-zinc-400'">
+        <lucide-icon [name]="open.playlist.id === 'liked' ? 'heart' : 'music-2'" [size]="30"></lucide-icon>
+      </div>
+      <div class="min-w-0 flex-1">
+        <h3 class="truncate text-2xl font-semibold tracking-tight">{{ open.playlist.name }}</h3>
+        <div class="mt-1 text-sm tabular-nums text-zinc-500">{{ open.playlist.songs }} songs</div>
+      </div>
+      <button class="icon-btn" (click)="open = null" aria-label="Close"><lucide-icon name="x" [size]="18"></lucide-icon></button>
     </div>
-  </a>
+    <p *ngIf="!open.songs" class="flex items-center gap-2 p-5 text-sm text-zinc-500">
+      <span class="inline-flex animate-spin"><lucide-icon name="loader-2" [size]="14"></lucide-icon></span> Loading…
+    </p>
+    <ol *ngIf="open.songs" class="flex-1 overflow-y-auto py-1">
+      <li *ngFor="let song of open.songs; let i = index; trackBy: trackBySong"
+          class="grid grid-cols-[2rem_minmax(0,1fr)_3rem_1.5rem] items-center gap-3 px-5 py-1.5 hover:bg-zinc-50"
+          [class.opacity-50]="song.status !== 'ok'">
+        <span class="text-right text-xs tabular-nums text-zinc-400">{{ i + 1 }}</span>
+        <div class="flex min-w-0 items-center gap-3">
+          <img *ngIf="song.image_url" [src]="song.image_url" alt="" loading="lazy" class="h-9 w-9 shrink-0 rounded object-cover" />
+          <div *ngIf="!song.image_url" class="h-9 w-9 shrink-0 rounded bg-zinc-100"></div>
+          <div class="min-w-0">
+            <div class="truncate text-sm font-medium">{{ song.title }}</div>
+            <div class="truncate text-xs text-zinc-500">{{ song.artists.join(', ') }} · {{ song.album }}</div>
+          </div>
+        </div>
+        <span class="text-right text-xs tabular-nums text-zinc-400">{{ song.duration }}</span>
+        <span class="inline-flex justify-end">
+          <span *ngIf="song.status === 'failed'" class="inline-flex text-amber-500" title="Not found"><lucide-icon name="alert-circle" [size]="15"></lucide-icon></span>
+          <span *ngIf="song.status === 'ignored'" class="inline-flex text-zinc-400" title="Ignored"><lucide-icon name="eye-off" [size]="15"></lucide-icon></span>
+          <span *ngIf="song.status === 'pending'" class="inline-flex text-zinc-400" title="Not downloaded"><lucide-icon name="arrow-down-circle" [size]="15"></lucide-icon></span>
+        </span>
+      </li>
+    </ol>
+  </aside>
 </section>
 
 <!-- Devices -->
 <section *ngIf="state" class="mt-10">
-  <h2 class="font-semibold">On your devices</h2>
-  <div class="mt-4 grid gap-3 sm:grid-cols-2">
+  <h2 class="text-lg font-semibold tracking-tight">On your devices</h2>
+  <div class="mt-4 grid gap-4 lg:grid-cols-2">
     <div *ngIf="state?.platform !== 'Windows'" class="card p-5 text-sm text-zinc-600">
-      <div class="font-medium text-zinc-900">On this Mac</div>
-      <p class="mt-2">Apple Music gets the songs and your playlists{{ whereInPlayer }}.</p>
+      <div class="flex items-center gap-3">
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-pink-400 text-white"><lucide-icon name="laptop" [size]="20"></lucide-icon></span>
+        <div class="font-semibold text-zinc-900">On this Mac</div>
+      </div>
+      <p class="mt-3">Apple Music gets the songs and your playlists{{ whereInPlayer }}.</p>
       <ng-container *ngTemplateOutlet="autoSync"></ng-container>
       <ng-container *ngTemplateOutlet="updateButton"></ng-container>
-      <div class="mt-5 border-t border-zinc-100 pt-4 font-medium text-zinc-900">On the iPhone</div>
+      <div class="mt-5 flex items-center gap-3 border-t border-zinc-100 pt-5">
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 text-white"><lucide-icon name="smartphone" [size]="20"></lucide-icon></span>
+        <div class="font-semibold text-zinc-900">On the iPhone</div>
+        <span class="ml-auto inline-flex items-center gap-1.5 text-xs" [ngClass]="devices?.iphone ? 'text-brand-600' : 'text-zinc-400'">
+          <span class="h-2 w-2 rounded-full" [ngClass]="devices?.iphone ? 'bg-brand-500' : 'bg-zinc-300'"></span>
+          {{ devices?.iphone ? 'iPhone connected' : 'No iPhone connected' }}
+        </span>
+      </div>
       <div class="mt-3">
         <button class="btn-outline" type="button" (click)="openMusic()" [disabled]="devices?.subscription === false">Open Apple Music</button>
         <p *ngIf="devices?.subscription === false" class="mt-1 text-xs text-zinc-500">Needs an Apple Music or iTunes Match subscription.</p>
         <ng-container *ngTemplateOutlet="info; context: { $implicit: 'In Settings, General, turn on Sync Library, then on the iPhone in Settings > Apps > Music.' }"></ng-container>
       </div>
       <div class="mt-4">
-        <div class="flex flex-wrap items-center gap-3">
-          <button class="btn-outline" type="button" (click)="openFinder()">Open Finder</button>
-          <span class="text-xs" [ngClass]="devices?.iphone ? 'text-brand-600' : 'text-zinc-400'">{{ devices?.iphone ? 'iPhone connected' : 'No iPhone connected' }}</span>
-        </div>
+        <button class="btn-outline" type="button" (click)="openFinder()">Open Finder</button>
         <ng-container *ngTemplateOutlet="info; context: { $implicit: 'Select the iPhone in the sidebar. In Music, check Sync music on iPhone, then Selected playlists, check ' + toCheck + ', and any other playlist you want on the iPhone, then click Apply. In General, turn on Show this iPhone when on Wi-Fi.' }"></ng-container>
       </div>
     </div>
     <div *ngIf="state?.platform === 'Windows'" class="card p-5 text-sm text-zinc-600">
-      <div class="font-medium text-zinc-900">On this PC</div>
-      <p class="mt-2">iTunes gets the songs and your playlists{{ whereInPlayer }}.</p>
+      <div class="flex items-center gap-3">
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-pink-400 text-white"><lucide-icon name="monitor" [size]="20"></lucide-icon></span>
+        <div class="font-semibold text-zinc-900">On this PC</div>
+      </div>
+      <p class="mt-3">iTunes gets the songs and your playlists{{ whereInPlayer }}.</p>
       <p class="mt-1">Install iTunes from the Microsoft Store and open it once. Don't install Apple Music or Apple Devices, iTunes would lose the music.</p>
       <ng-container *ngTemplateOutlet="autoSync"></ng-container>
       <ng-container *ngTemplateOutlet="updateButton"></ng-container>
@@ -109,20 +179,26 @@
       <p class="mt-1">Connect the iPhone, select it in iTunes, sync {{ toCheck }}, and any other playlist you want on the iPhone, and turn on “Sync with this iPhone over Wi-Fi”.</p>
     </div>
     <div class="card p-5 text-sm text-zinc-600">
-      <div class="font-medium text-zinc-900">Android</div>
-      <p class="mt-2">Set up once:</p>
-      <ol class="mt-1 list-decimal space-y-1 pl-4">
-        <li>Install Syncthing on the computer (<a href="https://syncthing.net/downloads/" target="_blank" rel="noopener" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2">syncthing.net</a>) and Syncthing-Fork on the phone (from F-Droid or Google Play).</li>
-        <li>Pair them, then share the folder <span class="break-all font-medium text-zinc-700">{{ state.music_dir }}</span>.</li>
-        <li>In Poweramp, add the folder. It reads the playlists.</li>
+      <div class="flex items-center gap-3">
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-lime-400 text-white"><lucide-icon name="tablet-smartphone" [size]="20"></lucide-icon></span>
+        <div class="font-semibold text-zinc-900">Android</div>
+      </div>
+      <p class="mt-3">Set up once:</p>
+      <ol class="mt-2 space-y-2">
+        <li class="flex gap-3"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-700">1</span>
+          <span>Install Syncthing on the computer (<a href="https://syncthing.net/downloads/" target="_blank" rel="noopener" class="font-medium text-zinc-700 underline decoration-zinc-300 underline-offset-2">syncthing.net</a>) and Syncthing-Fork on the phone (from F-Droid or Google Play).</span></li>
+        <li class="flex gap-3"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-700">2</span>
+          <span>Pair them, then share the folder <span class="break-all font-medium text-zinc-700">{{ state.music_dir }}</span>.</span></li>
+        <li class="flex gap-3"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-700">3</span>
+          <span>In Poweramp, add the folder. It reads the playlists.</span></li>
       </ol>
-      <p class="mt-2">The folder syncs when the phone and the computer are on the same Wi-Fi.</p>
+      <p class="mt-3">The folder syncs when the phone and the computer are on the same Wi-Fi.</p>
     </div>
   </div>
 </section>
 
 <!-- Failed / removed -->
-<section *ngIf="state && (state.failed.length || state.removed.length || state.ignored.length)" class="mt-8">
+<section *ngIf="state && (state.failed.length || state.removed.length || state.ignored.length)" class="mt-10">
   <div class="inline-flex rounded-full bg-zinc-100 p-1 text-sm">
     <button class="rounded-full px-4 py-1.5 font-medium transition"
             [ngClass]="tab === 'failed' ? 'bg-white text-zinc-900 shadow-soft' : 'text-zinc-500 hover:text-zinc-900'"
@@ -138,10 +214,10 @@
     {{ tab === 'failed' ? 'Could not be downloaded. Retried at every sync.' : tab === 'removed' ? 'No longer in any synced playlist.' : 'Not downloaded by Sync.' }}
   </p>
   <ul class="card mt-3 divide-y divide-zinc-100 overflow-hidden">
-    <li *ngFor="let t of list.slice(0, shown); trackBy: trackByTrack" class="px-4 py-2.5">
+    <li *ngFor="let t of list.slice(0, shown); trackBy: trackByTrack" class="px-4 py-3 hover:bg-zinc-50/60">
       <div class="flex items-center gap-3">
-        <img *ngIf="t.image_url" [src]="t.image_url" alt="" loading="lazy" class="h-9 w-9 rounded-md object-cover" />
-        <div *ngIf="!t.image_url" class="h-9 w-9 rounded-md bg-zinc-100"></div>
+        <img *ngIf="t.image_url" [src]="t.image_url" alt="" loading="lazy" class="h-12 w-12 rounded-lg object-cover shadow-soft" />
+        <div *ngIf="!t.image_url" class="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300"><lucide-icon name="music-2" [size]="18"></lucide-icon></div>
         <div class="min-w-0 flex-1">
           <div class="truncate text-sm font-medium">{{ t.title }}</div>
           <div class="truncate text-xs text-zinc-500">{{ t.artists.join(', ') }} · {{ t.album }}</div>

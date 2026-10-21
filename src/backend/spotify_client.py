@@ -135,11 +135,17 @@ def _save_cache(cache):
     _cache.update(stamp=(stat.st_mtime_ns, stat.st_size), data=cache)
 
 
-def _compact(track):
-    """Only the fields the app uses, to keep the cache small."""
+CACHE_VERSION = 3  # 2: popularity and date added (Stats); 3: the playable copy of a song (playable_id)
+
+
+def _compact(track, added_at=None):
+    """Only the fields the app uses, to keep the cache small. added_at: when it was added to the playlist."""
     album = track.get('album') or {}
+    # Read for your country: a copy not available there comes as the copy Spotify plays instead.
+    linked = (track.get('linked_from') or {}).get('id')
     return {
-        'id': track['id'], 'name': track['name'],
+        'popularity': track.get('popularity'), 'added_at': added_at,
+        'id': linked or track['id'], 'playable_id': track['id'] if linked else None, 'name': track['name'],
         'artists': [{'id': a.get('id'), 'name': a.get('name')} for a in track.get('artists', [])],
         'album': {
             'id': album.get('id'), 'name': album.get('name'), 'images': album.get('images') or [],
@@ -168,17 +174,18 @@ def _track_of(entry):
 
 def liked_tracks(sp):
     """Liked Songs, newest first. Read again only when the count or the newest song changed."""
-    first = sp.current_user_saved_tracks(limit=50)
-    newest = _track_of(first['items'][0])['id'] if first['items'] else None
+    first = sp.current_user_saved_tracks(limit=50, market='from_token')
+    newest = _compact(_track_of(first['items'][0]))['id'] if first['items'] else None
     signature = [first.get('total'), newest]
     with _lock:
         cache = _load_cache()
-        if cache.get('liked') and cache['liked']['signature'] == signature:
+        if cache.get('liked') and cache['liked']['signature'] == signature and cache['liked'].get('v') == CACHE_VERSION:
             return cache['liked']['tracks']
-    tracks = [_compact(t) for t in (_track_of(e) for e in _paginate(sp, first)) if t and t.get('id')]
+    tracks = [_compact(_track_of(e), e.get('added_at')) for e in _paginate(sp, first)
+              if _track_of(e) and _track_of(e).get('id')]
     with _lock:
         cache = _load_cache()
-        cache['liked'] = {'signature': signature, 'tracks': tracks}
+        cache['liked'] = {'signature': signature, 'tracks': tracks, 'v': CACHE_VERSION}
         _save_cache(cache)
     return tracks
 
@@ -199,14 +206,15 @@ def playlist_tracks(sp, playlist_id):
     snapshot = _snapshot(sp, playlist_id)
     with _lock:
         cached = _load_cache()['playlists'].get(playlist_id)
-    if snapshot and cached and cached['snapshot'] == snapshot:
+    if snapshot and cached and cached['snapshot'] == snapshot and cached.get('v') == CACHE_VERSION:
         return cached['tracks']
-    page = sp._get(f'playlists/{playlist_id}/items', limit=50)
-    tracks = [_compact(t) for t in (_track_of(e) for e in _paginate(sp, page)) if t and t.get('id')]
+    page = sp._get(f'playlists/{playlist_id}/items', limit=50, market='from_token')
+    tracks = [_compact(_track_of(e), e.get('added_at')) for e in _paginate(sp, page)
+              if _track_of(e) and _track_of(e).get('id')]
     if snapshot:
         with _lock:
             cache = _load_cache()
-            cache['playlists'][playlist_id] = {'snapshot': snapshot, 'tracks': tracks}
+            cache['playlists'][playlist_id] = {'snapshot': snapshot, 'tracks': tracks, 'v': CACHE_VERSION}
             _save_cache(cache)
     return tracks
 
@@ -222,18 +230,32 @@ def _forget_snapshots():
         _snapshots['at'] = 0
 
 
-def add_to_playlist(sp, playlist_id, track_ids):
+def _changed(playlist_id=None):
+    """A playlist (None: Liked Songs) the app just wrote to: read again next time, even if Spotify
+    still gives its old snapshot or its old count."""
     _forget_snapshots()
+    with _lock:
+        cache = _load_cache()
+        if (cache['playlists'].pop(playlist_id, None) if playlist_id else cache.pop('liked', None)):
+            _save_cache(cache)
+
+
+def add_to_playlist(sp, playlist_id, track_ids, position=None):
+    """Add at the end, or from a place in the playlist (0 is first)."""
     uris = [f'spotify:track:{tid}' for tid in track_ids]
     for i in range(0, len(uris), 100):
-        sp._post(f'playlists/{playlist_id}/items', payload={'uris': uris[i:i + 100]})
+        payload = {'uris': uris[i:i + 100]}
+        if position is not None:
+            payload['position'] = position + i
+        sp._post(f'playlists/{playlist_id}/items', payload=payload)
+    _changed(playlist_id)
 
 
 def remove_from_playlist(sp, playlist_id, track_ids):
-    _forget_snapshots()
     uris = [{'uri': f'spotify:track:{tid}'} for tid in track_ids]
     for i in range(0, len(uris), 100):
         sp._delete(f'playlists/{playlist_id}/items', payload={'items': uris[i:i + 100]})
+    _changed(playlist_id)
 
 
 def like_tracks(sp, track_ids):
@@ -241,6 +263,7 @@ def like_tracks(sp, track_ids):
     uris = [f'spotify:track:{tid}' for tid in track_ids]
     for i in range(0, len(uris), 40):
         sp._put('me/library', uris=','.join(uris[i:i + 40]))
+    _changed()
 
 
 def unlike_tracks(sp, track_ids):
@@ -248,6 +271,7 @@ def unlike_tracks(sp, track_ids):
     uris = [f'spotify:track:{tid}' for tid in track_ids]
     for i in range(0, len(uris), 40):
         sp._delete('me/library', uris=','.join(uris[i:i + 40]))
+    _changed()
 
 
 def create_playlist(sp, name):

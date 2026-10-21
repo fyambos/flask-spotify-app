@@ -24,6 +24,8 @@ import library
 import setup_analysis
 import sort_state
 import sorter
+import spotify_duplicates
+import stats
 from spotify_client import SpotifyLimitError, blocked, create_client, keys_present, logged_in, playlist_meta
 from spotify_client import me as spotify_me
 
@@ -65,6 +67,7 @@ import itunes_windows
 apple_job = sorter.Job(apple_music.update if apple_music.available() else itunes_windows.update, 'apple')
 spotify_sync_job = sorter.Job(lambda sp, progress: sort_state.push(sp, catalog_store.refresh_from_spotify(sp, progress), progress),
                               'spotify_sync')
+duplicates_job = sorter.Job(spotify_duplicates.remove, 'spotify_duplicates')
 
 
 AUTO_SYNC_MAX = 200  # songs; above it, or on the first import, the Sync waits for the user
@@ -336,6 +339,24 @@ def run_spotify_sync():
     return jsonify({'started': started, **spotify_sync_job.state}), 202 if started else 409
 
 
+@app.route('/sort/duplicates', methods=['GET'])
+def get_spotify_duplicates():
+    """Duplicates in your Spotify playlists, from the last reading (nothing asked to Spotify)."""
+    return jsonify({'duplicates': spotify_duplicates.find(), 'job': duplicates_job.state})
+
+
+@app.route('/sort/duplicates', methods=['POST'])
+def remove_spotify_duplicates():
+    started = duplicates_job.start(sp, keys=request.json['keys'])
+    return jsonify({'started': started, **duplicates_job.state}), 202 if started else 409
+
+
+@app.route('/sort/duplicates/keep', methods=['POST'])
+def keep_spotify_duplicate():
+    spotify_duplicates.keep_both(request.json['key'])
+    return '', 204
+
+
 @app.route('/setup/analyze', methods=['POST'])
 def start_setup_analysis():
     started = setup_job.start(sp, playlists=request.json['playlists'],
@@ -388,6 +409,16 @@ def get_library():
     return jsonify({'job': job, 'import': library.load_import_result(), 'apple_music': {
         'available': app_name is not None, 'app': app_name, 'job': apple_job.state}, 'chosen': chosen_job.state,
         'platform': platform.system(), **library.summary()})
+
+
+@app.route('/library/playlists', methods=['GET'])
+def get_library_playlists():
+    return jsonify(library.playlists_overview())
+
+
+@app.route('/library/playlists/<playlist_id>', methods=['GET'])
+def get_library_playlist(playlist_id):
+    return jsonify(library.playlist_songs(playlist_id))
 
 
 @app.route('/library/apple-music', methods=['POST'])
@@ -575,6 +606,12 @@ def mark_playlists_seen():
 @app.route('/get-playlist-details/<playlist_id>', methods=['GET'])
 def get_playlist_details(playlist_id):
     return jsonify(playlist_meta(sp, playlist_id))
+
+
+@app.route('/stats', methods=['GET'])
+def get_stats():
+    """What the playlists say about your taste (all of them, or ?playlist=<id>), from whatever the app has."""
+    return jsonify({**stats.compute(request.args.get('playlist') or None), 'playlists': stats.scopes()})
 
 
 @app.route('/get-top-tracks', methods=['GET'])

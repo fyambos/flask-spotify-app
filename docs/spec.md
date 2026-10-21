@@ -167,6 +167,31 @@ Pour mettre à jour, on refait l'export. Il n'y a pas de synchro automatique pos
 
 **Rappel** : quand le dernier import a plus de 7 jours, un bandeau s'affiche : « Last import: {n} days ago. » avec les boutons « Import » et « Don't show again ». *(à valider)*
 
+### Exportify
+Gratuit, sans Premium, depuis Spotify seulement. Exportify (exportify.net) passe par l'API Spotify avec sa propre app : un compte gratuit suffit.
+- « Export All » donne un zip `spotify_playlists.zip`, un CSV par playlist, nommé d'après la playlist (`Liked_Songs.csv` pour Liked Songs, `Saved_Albums.csv` ignoré).
+- Colonnes utilisées : `Track URI, ISRC, Track Name, Album Name, Artist Name(s)` (séparés par `;`), `Release Date, Duration (ms), Added By`.
+- Le nom de fichier perd des caractères (« relax/study » → « relaxstudy », espaces → `_`) : la playlist est retrouvée en ignorant ponctuation et espaces, et garde son vrai nom.
+- Propriétaire : `Added By` de Liked Songs donne ton compte. Une playlist où aucune chanson n'est ajoutée par toi est celle d'une autre personne.
+- Une chanson deux fois dans une playlist y reste deux fois, comme avec l'API.
+
+Texte de la page Import : « Exportify » / « Free. Exports Spotify playlists to a file. », puis « Open Exportify », « Click Get Started and log in to Spotify. », « Click Export All, then save the zip file in your Downloads folder. It is imported automatically. » *(à valider)*
+
+### Si Exportify disparaît
+Plan de secours, pas à faire tant qu'Exportify marche : une extension de navigateur (ou un bouton à glisser dans les favoris) sur open.spotify.com, connecté. Elle lit les playlists avec le jeton que le lecteur web de Spotify a déjà obtenu lui-même, puis les passe à Music Sorter.
+- Ne fabrique pas le code TOTP et n'extrait aucune clé du lecteur : seulement la session de l'utilisateur, dans son navigateur.
+- Utilise les requêtes internes du site, pas l'API officielle : casse quand Spotify change son site, et sans doute contraire à leurs conditions d'utilisation (risque de blocage du compte).
+
+### D'où viennent les playlists
+- Spotify connecté et pas bloqué : Check lit Spotify, même après l'import d'un fichier.
+- Spotify bloqué ou pas connecté : la dernière lecture Spotify, ou le dernier fichier importé.
+- Un fichier d'un autre service (chansons sans ID Spotify) reste la source, même avec Spotify connecté.
+- À l'import d'un fichier, une chanson déjà lue sur Spotify garde l'artiste de l'album, la durée et la pochette : elle reste dans le même dossier quelle que soit la source.
+- Library affiche sous « Next sync » : « Checked {date}, playlists from Spotify. » ou « …, playlists from {fichier}. »
+- Un seul bouton « Sync » : il fait d'abord le Check (lecture des playlists, comparaison avec les fichiers), puis la fenêtre « Sync library? » montre ce qu'il va faire : « Downloads {n} songs. Corrects {n} songs (wrong length). Moves {n} songs. Removes {n} songs no longer in playlists. Cleans {n} duplicates. », seulement les parties non nulles, sinon « Everything up to date. ». Sans rien de téléchargé : « Click Sync to see what will be downloaded. »
+- Une chanson dont seule une autre durée a été trouvée garde son fichier et apparaît dans Not found : « Only found in another length: {durée du fichier} instead of {durée Spotify}. » Choose la remplace (l'ancien fichier va à la Corbeille, ou reste si le téléchargement échoue). Un choix fait à la main n'est jamais remplacé par la vérification de durée.
+- Not found → Choose → « Ignore this song » : la chanson n'est plus téléchargée par Sync. Onglet « Ignored » (« Not downloaded by Sync. ») avec « Don't ignore ».
+
 ### Export de données Spotify (deuxième option)
 Proposé aussi : gratuit, sans Premium. Un bouton ouvre la page de ton compte Spotify, tu cliques sur « Demander », Spotify envoie un e-mail quand c'est prêt (jusqu'à 30 jours, en général quelques jours). L'app repère le zip dans Téléchargements et fait le reste.
 

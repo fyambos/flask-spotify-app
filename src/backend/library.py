@@ -293,25 +293,36 @@ def sync(sp, progress=None, apply=True, catalog=None):
     tracks = library['tracks']
     left = set()  # folders files were moved out of, removed at the end if empty
 
+    # The music folder changed: every path becomes relative to the new one before anything moves,
+    # so the library stays right if the sync stops halfway.
+    if old_root != root:
+        for record in tracks.values():
+            if record.get('path'):
+                record['path'] = os.path.relpath(old_root / record['path'], root)
+        library['root'] = str(root)
+        save_library(library)
+
     gone_folder = removed_folder(config)
+    moved = {}  # old path -> new path: two Spotify ids (single and album) can share one file
     for i, track_id in enumerate(plan['to_move'], 1):
         progress(step='Moving songs to their new folder', done=i, total=len(plan['to_move']))
         record = tracks[track_id]
         target = plan['desired'].get(track_id, gone_folder)
-        left.add((old_root / record['path']).parent)
-        _move(old_root, root, record, target)
+        src = os.path.normpath(root / record['path'])
+        if src in moved:
+            record['path'], record['folder'] = moved[src]
+        elif Path(src).exists():
+            left.add(Path(src).parent)
+            _move(root, root, record, target)
+            moved[src] = (record['path'], record['folder'])
+        else:
+            record.update(path=None, status='failed', error='File not found')  # downloaded again next time
+            continue
         if track_id in plan['desired']:
             record['status'] = 'ok'
             record.pop('removed_at', None)
         if i % 50 == 0:
             save_library(library)
-    # Every path is now relative to the current music folder.
-    if old_root != root:
-        for record in tracks.values():
-            if record.get('path') and not (root / record['path']).exists() and (old_root / record['path']).exists():
-                record['path'] = os.path.relpath(old_root / record['path'], root)
-        library['root'] = str(root)
-        old_root = root
     save_library(library)
 
     # Files of another version: set aside, removed only once the right version is downloaded.

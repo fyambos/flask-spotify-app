@@ -135,15 +135,17 @@ def _save_cache(cache):
     _cache.update(stamp=(stat.st_mtime_ns, stat.st_size), data=cache)
 
 
-CACHE_VERSION = 2  # 2: tracks keep their popularity and the date they were added (Stats)
+CACHE_VERSION = 3  # 2: popularity and date added (Stats); 3: the playable copy of a song (playable_id)
 
 
 def _compact(track, added_at=None):
     """Only the fields the app uses, to keep the cache small. added_at: when it was added to the playlist."""
     album = track.get('album') or {}
+    # Read for your country: a copy not available there comes as the copy Spotify plays instead.
+    linked = (track.get('linked_from') or {}).get('id')
     return {
         'popularity': track.get('popularity'), 'added_at': added_at,
-        'id': track['id'], 'name': track['name'],
+        'id': linked or track['id'], 'playable_id': track['id'] if linked else None, 'name': track['name'],
         'artists': [{'id': a.get('id'), 'name': a.get('name')} for a in track.get('artists', [])],
         'album': {
             'id': album.get('id'), 'name': album.get('name'), 'images': album.get('images') or [],
@@ -172,8 +174,8 @@ def _track_of(entry):
 
 def liked_tracks(sp):
     """Liked Songs, newest first. Read again only when the count or the newest song changed."""
-    first = sp.current_user_saved_tracks(limit=50)
-    newest = _track_of(first['items'][0])['id'] if first['items'] else None
+    first = sp.current_user_saved_tracks(limit=50, market='from_token')
+    newest = _compact(_track_of(first['items'][0]))['id'] if first['items'] else None
     signature = [first.get('total'), newest]
     with _lock:
         cache = _load_cache()
@@ -206,7 +208,7 @@ def playlist_tracks(sp, playlist_id):
         cached = _load_cache()['playlists'].get(playlist_id)
     if snapshot and cached and cached['snapshot'] == snapshot and cached.get('v') == CACHE_VERSION:
         return cached['tracks']
-    page = sp._get(f'playlists/{playlist_id}/items', limit=50)
+    page = sp._get(f'playlists/{playlist_id}/items', limit=50, market='from_token')
     tracks = [_compact(_track_of(e), e.get('added_at')) for e in _paginate(sp, page)
               if _track_of(e) and _track_of(e).get('id')]
     if snapshot:

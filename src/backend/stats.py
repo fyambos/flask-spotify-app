@@ -160,6 +160,12 @@ def compute(playlist_id=None):
         parts['added'] = {'per_month': timeline, 'busiest': busiest, 'busiest_songs': months[busiest]}
 
     # 6. Hits or discoveries (Spotify's popularity, 0 to 100; 0 is often "unknown")
+    # A copy Spotify replaces by another one in your country keeps a near-zero popularity of its own:
+    # the one of the copy it plays is used, or none when that copy is not in your playlists.
+    own_popularity = {tid: t.get('popularity') for tid, t in view['tracks'].items() if not t.get('playable_id')}
+    for t in tracks:
+        if t.get('playable_id'):
+            t['popularity'] = own_popularity.get(t['playable_id'])
     popular = [(t['popularity'], t) for t in tracks if t.get('popularity')]
     if len(popular) >= 10:
         parts['popularity'] = {

@@ -239,6 +239,30 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
     return this.items.filter(item => this.matchesStatus(item, filter)).length;
   }
 
+  /** Cover of a Spotify playlist (or Liked Songs: none, drawn in the page). */
+  coverOf(playlistId: string | null): string | null {
+    return this.allPlaylists.find(p => p.id === playlistId)?.image_url || null;
+  }
+
+  /** Cover of a "sort into" playlist, by its entry id. */
+  entryCover(entryId: string | null): string | null {
+    return this.coverOf(this.playlists.find(p => p.id === entryId)?.playlist_id || null);
+  }
+
+  /** Songs ready to add per playlist, counted once per analysis read. */
+  private planned = { state: null as LikesState | null, counts: {} as { [entryId: string]: number } };
+
+  plannedIn(entryId: string): number {
+    if (this.planned.state !== this.state) {
+      this.planned = { state: this.state, counts: Object.fromEntries(this.distribution.map(d => [d.id, d.planned])) };
+    }
+    return this.planned.counts[entryId] || 0;
+  }
+
+  trackByItem(_: number, item: LikeItem): string {
+    return item.track_id;
+  }
+
   get distribution(): { id: string; name: string; planned: number }[] {
     return this.playlists
       .map(p => ({

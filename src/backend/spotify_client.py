@@ -230,11 +230,15 @@ def _forget_snapshots():
         _snapshots['at'] = 0
 
 
-def add_to_playlist(sp, playlist_id, track_ids):
+def add_to_playlist(sp, playlist_id, track_ids, position=None):
+    """Add at the end, or from a place in the playlist (0 is first)."""
     _forget_snapshots()
     uris = [f'spotify:track:{tid}' for tid in track_ids]
     for i in range(0, len(uris), 100):
-        sp._post(f'playlists/{playlist_id}/items', payload={'uris': uris[i:i + 100]})
+        payload = {'uris': uris[i:i + 100]}
+        if position is not None:
+            payload['position'] = position + i
+        sp._post(f'playlists/{playlist_id}/items', payload=payload)
 
 
 def remove_from_playlist(sp, playlist_id, track_ids):

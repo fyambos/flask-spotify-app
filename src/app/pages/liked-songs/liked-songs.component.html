@@ -87,6 +87,35 @@
   </ng-container>
 </div>
 
+<!-- Duplicates in Spotify -->
+<div *ngIf="duplicates.length && status?.spotify?.connected && !status?.spotify?.limit" class="card mt-4 p-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="font-semibold">Duplicates in Spotify</h2>
+      <p class="mt-1 text-sm text-zinc-500">{{ duplicates.length }} songs are in a playlist twice.</p>
+    </div>
+    <button class="btn-brand" [disabled]="removingDuplicates" (click)="removeDuplicates()">
+      <span class="inline-flex animate-spin"><lucide-icon *ngIf="removingDuplicates" name="loader-2" [size]="16"></lucide-icon></span>
+      Remove duplicates
+    </button>
+  </div>
+  <ul class="mt-4 max-h-96 divide-y divide-zinc-100 overflow-y-auto pr-1 text-sm" [class.opacity-60]="removingDuplicates">
+    <li *ngFor="let d of duplicates; trackBy: duplicateKey" class="flex items-center gap-3 py-2.5">
+      <img *ngIf="d.keep.image" [src]="d.keep.image" alt="" loading="lazy" class="h-10 w-10 shrink-0 rounded-md object-cover" />
+      <div *ngIf="!d.keep.image" class="h-10 w-10 shrink-0 rounded-md bg-zinc-100"></div>
+      <div class="min-w-0 flex-1">
+        <div class="truncate"><span class="font-medium">{{ d.keep.title }}</span> · {{ d.keep.artist }} <span class="text-zinc-500">— {{ d.playlist }}</span></div>
+        <div *ngIf="d.kind === 'versions'" class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-zinc-500">
+          <span *ngIf="singleAndAlbum(d)" class="chip py-0">Single and album</span>
+          <span>{{ d.keep.album }}</span>
+          <span *ngFor="let s of d.remove" class="line-through decoration-zinc-400">{{ s.album }}</span>
+        </div>
+      </div>
+      <button class="btn-ghost shrink-0 px-3 py-1.5" [disabled]="removingDuplicates" (click)="keepBoth(d)">Keep both</button>
+    </li>
+  </ul>
+</div>
+
 <div *ngIf="state?.preview && playlists.length" class="mt-6 flex flex-wrap items-center justify-end gap-2">
     <button class="btn-outline" (click)="startPreview()" [disabled]="state?.job?.running">
       <lucide-icon name="refresh-cw" [size]="16" [class.animate-spin]="state?.job?.running"></lucide-icon> Re-analyse

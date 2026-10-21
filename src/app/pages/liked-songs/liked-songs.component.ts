@@ -5,7 +5,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent } from 'src/app/components/confirm-dialog/confirm-dialog.component';
 import {
-  GenrePlaylist, LikeItem, LikesState, PlaylistService, SetupStatus, SpotifyPlaylist, SpotifySyncChange,
+  GenrePlaylist, LikeItem, LikesState, PlaylistService, SetupStatus, SpotifyDuplicate, SpotifyPlaylist, SpotifySyncChange,
 } from 'src/app/services/playlist.service';
 import { StatusService } from 'src/app/services/status.service';
 
@@ -41,6 +41,8 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
   addingSource = '';
   status: SetupStatus | null = null;
   sync: { changes: SpotifySyncChange[]; loading: boolean; running: boolean } | null = null;
+  duplicates: SpotifyDuplicate[] = [];
+  removingDuplicates = false;
 
   constructor(private playlistService: PlaylistService, private dialog: MatDialog, private statusService: StatusService,
               private events: EventsService) { }
@@ -51,6 +53,12 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
       this.events.job('likes').subscribe(job => {
         if (this.state) this.state = { ...this.state, job };
         if (!job.running) this.refresh();
+      }),
+      this.events.job('spotify_duplicates').subscribe(job => {
+        if (job.running || !this.removingDuplicates) return;
+        this.removingDuplicates = false;
+        if (job.error) this.message = errorText(job.error, job.error_params);
+        this.loadDuplicates();
       }),
       this.events.job('spotify_sync').subscribe(job => {
         if (job.running || !this.sync?.running) return;
@@ -70,6 +78,35 @@ export class LikedSongsComponent implements OnInit, OnDestroy {
     this.playlistService.getPlaylists().subscribe(list => this.allPlaylists = list.filter(p => p.owned !== false));
     this.statusService.status$.subscribe(status => this.status = status);
     this.statusService.refresh();
+    this.loadDuplicates();
+  }
+
+  loadDuplicates(): void {
+    this.playlistService.getDuplicates().subscribe(res => {
+      this.duplicates = res.duplicates;
+      this.removingDuplicates = res.job.running;
+    });
+  }
+
+  removeDuplicates(): void {
+    this.removingDuplicates = true;
+    this.playlistService.removeDuplicates(this.duplicates.map(d => d.key)).subscribe();
+  }
+
+  keepBoth(duplicate: SpotifyDuplicate): void {
+    this.duplicates = this.duplicates.filter(d => d !== duplicate);
+    this.playlistService.keepBoth(duplicate.key).subscribe();
+  }
+
+  duplicateKey(_: number, duplicate: SpotifyDuplicate): string {
+    return duplicate.key;
+  }
+
+  /** A single and its album version, nothing else. */
+  singleAndAlbum(duplicate: SpotifyDuplicate): boolean {
+    const types = [duplicate.keep, ...duplicate.remove].map(s => s.album_type);
+    return duplicate.kind === 'versions' && types.includes('album') && types.includes('single')
+      && types.every(t => t === 'album' || t === 'single');
   }
 
   get spotifyReady(): boolean {

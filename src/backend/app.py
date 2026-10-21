@@ -24,6 +24,7 @@ import library
 import setup_analysis
 import sort_state
 import sorter
+import spotify_duplicates
 import stats
 from spotify_client import SpotifyLimitError, blocked, create_client, keys_present, logged_in, playlist_meta
 from spotify_client import me as spotify_me
@@ -66,6 +67,7 @@ import itunes_windows
 apple_job = sorter.Job(apple_music.update if apple_music.available() else itunes_windows.update, 'apple')
 spotify_sync_job = sorter.Job(lambda sp, progress: sort_state.push(sp, catalog_store.refresh_from_spotify(sp, progress), progress),
                               'spotify_sync')
+duplicates_job = sorter.Job(spotify_duplicates.remove, 'spotify_duplicates')
 
 
 AUTO_SYNC_MAX = 200  # songs; above it, or on the first import, the Sync waits for the user
@@ -335,6 +337,24 @@ def run_spotify_sync():
     if started:
         sort_state.set_waiting(False)
     return jsonify({'started': started, **spotify_sync_job.state}), 202 if started else 409
+
+
+@app.route('/sort/duplicates', methods=['GET'])
+def get_spotify_duplicates():
+    """Duplicates in your Spotify playlists, from the last reading (nothing asked to Spotify)."""
+    return jsonify({'duplicates': spotify_duplicates.find(), 'job': duplicates_job.state})
+
+
+@app.route('/sort/duplicates', methods=['POST'])
+def remove_spotify_duplicates():
+    started = duplicates_job.start(sp, keys=request.json['keys'])
+    return jsonify({'started': started, **duplicates_job.state}), 202 if started else 409
+
+
+@app.route('/sort/duplicates/keep', methods=['POST'])
+def keep_spotify_duplicate():
+    spotify_duplicates.keep_both(request.json['key'])
+    return '', 204
 
 
 @app.route('/setup/analyze', methods=['POST'])

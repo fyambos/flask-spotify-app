@@ -18,7 +18,7 @@ export class HomeComponent implements OnInit {
   ngOnInit(): void {
     // Stats come from Spotify only.
     this.statusService.status$.subscribe(status => {
-      this.features = FEATURES.filter(f => f.path !== '/stats' || !!status?.spotify?.connected);
+      this.features = FEATURES.filter(f => f.path !== '/stats' || !!status?.playlists || !!status?.spotify?.connected);
     });
     this.playlistService.getLibrary().subscribe(state => this.library = state);
     this.playlistService.getLikesState().subscribe(state => this.likes = state);

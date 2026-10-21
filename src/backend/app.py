@@ -24,6 +24,7 @@ import library
 import setup_analysis
 import sort_state
 import sorter
+import stats
 from spotify_client import SpotifyLimitError, blocked, create_client, keys_present, logged_in, playlist_meta
 from spotify_client import me as spotify_me
 
@@ -575,6 +576,12 @@ def mark_playlists_seen():
 @app.route('/get-playlist-details/<playlist_id>', methods=['GET'])
 def get_playlist_details(playlist_id):
     return jsonify(playlist_meta(sp, playlist_id))
+
+
+@app.route('/stats', methods=['GET'])
+def get_stats():
+    """What the playlists say about your taste (all of them, or ?playlist=<id>), from whatever the app has."""
+    return jsonify({**stats.compute(request.args.get('playlist') or None), 'playlists': stats.scopes()})
 
 
 @app.route('/get-top-tracks', methods=['GET'])

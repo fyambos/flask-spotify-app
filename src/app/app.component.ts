@@ -52,8 +52,8 @@ export class AppComponent implements OnInit {
       { path: '/home', label: 'Home', icon: 'home' },
       { path: '/library', label: 'Library', icon: 'hard-drive' },
       { path: '/sort', label: 'Sort Playlists', icon: 'list-music' },
-      // Stats come from Spotify only.
-      ...(this.status?.spotify?.connected ? [{ path: '/stats', label: 'Stats', icon: 'bar-chart-3' }] : []),
+      // Stats come from the playlists, whatever their source.
+      ...(this.status?.playlists || this.status?.spotify?.connected ? [{ path: '/stats', label: 'Stats', icon: 'bar-chart-3' }] : []),
       { path: '/settings', label: 'Settings', icon: 'settings' },
     ];
   }

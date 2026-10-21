@@ -135,10 +135,14 @@ def _save_cache(cache):
     _cache.update(stamp=(stat.st_mtime_ns, stat.st_size), data=cache)
 
 
-def _compact(track):
-    """Only the fields the app uses, to keep the cache small."""
+CACHE_VERSION = 2  # 2: tracks keep their popularity and the date they were added (Stats)
+
+
+def _compact(track, added_at=None):
+    """Only the fields the app uses, to keep the cache small. added_at: when it was added to the playlist."""
     album = track.get('album') or {}
     return {
+        'popularity': track.get('popularity'), 'added_at': added_at,
         'id': track['id'], 'name': track['name'],
         'artists': [{'id': a.get('id'), 'name': a.get('name')} for a in track.get('artists', [])],
         'album': {
@@ -173,12 +177,13 @@ def liked_tracks(sp):
     signature = [first.get('total'), newest]
     with _lock:
         cache = _load_cache()
-        if cache.get('liked') and cache['liked']['signature'] == signature:
+        if cache.get('liked') and cache['liked']['signature'] == signature and cache['liked'].get('v') == CACHE_VERSION:
             return cache['liked']['tracks']
-    tracks = [_compact(t) for t in (_track_of(e) for e in _paginate(sp, first)) if t and t.get('id')]
+    tracks = [_compact(_track_of(e), e.get('added_at')) for e in _paginate(sp, first)
+              if _track_of(e) and _track_of(e).get('id')]
     with _lock:
         cache = _load_cache()
-        cache['liked'] = {'signature': signature, 'tracks': tracks}
+        cache['liked'] = {'signature': signature, 'tracks': tracks, 'v': CACHE_VERSION}
         _save_cache(cache)
     return tracks
 
@@ -199,14 +204,15 @@ def playlist_tracks(sp, playlist_id):
     snapshot = _snapshot(sp, playlist_id)
     with _lock:
         cached = _load_cache()['playlists'].get(playlist_id)
-    if snapshot and cached and cached['snapshot'] == snapshot:
+    if snapshot and cached and cached['snapshot'] == snapshot and cached.get('v') == CACHE_VERSION:
         return cached['tracks']
     page = sp._get(f'playlists/{playlist_id}/items', limit=50)
-    tracks = [_compact(t) for t in (_track_of(e) for e in _paginate(sp, page)) if t and t.get('id')]
+    tracks = [_compact(_track_of(e), e.get('added_at')) for e in _paginate(sp, page)
+              if _track_of(e) and _track_of(e).get('id')]
     if snapshot:
         with _lock:
             cache = _load_cache()
-            cache['playlists'][playlist_id] = {'snapshot': snapshot, 'tracks': tracks}
+            cache['playlists'][playlist_id] = {'snapshot': snapshot, 'tracks': tracks, 'v': CACHE_VERSION}
             _save_cache(cache)
     return tracks
 

@@ -4,9 +4,13 @@ The config lives in src/backend/data/config.json (ignored by git, one per machin
 Override the location with the SPOTSORT_DATA_DIR environment variable.
 """
 import json
+import threading
+from contextlib import contextmanager
 import os
 import uuid
 from pathlib import Path
+
+from errors import AppError
 
 BACKEND_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv('SPOTSORT_DATA_DIR', BACKEND_DIR / 'data')).expanduser()
@@ -92,6 +96,26 @@ def load_config():
     return config
 
 
+_lock = threading.RLock()  # two requests (or a job and a request) changing the settings at once
+
+
+def _locked(change):
+    """A change of the settings reads, changes and saves them in one go: none is lost."""
+    def locked(*args, **kwargs):
+        with _lock:
+            return change(*args, **kwargs)
+    return locked
+
+
+@contextmanager
+def editing():
+    """with editing() as config: ... -- the settings as they are now, saved at the end."""
+    with _lock:
+        config = load_config()
+        yield config
+        save_config(config)
+
+
 def save_config(config):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = CONFIG_PATH.with_suffix('.tmp')
@@ -99,11 +123,12 @@ def save_config(config):
     tmp.replace(CONFIG_PATH)
 
 
+@_locked
 def add_playlist(name, playlist_id, genre_names, **rules):
     """A "sort into" playlist. playlist_id None: a playlist that only exists in the app for now."""
     config = load_config()
     if playlist_id and any(p['playlist_id'] == playlist_id for p in config['playlists']):
-        raise ValueError('This playlist has already been added!')
+        raise AppError('playlist_exists')
     entry = {'id': _new_id(), 'name': name, 'playlist_id': playlist_id, 'genre_names': genre_names}
     entry.update({f: rules.get(f, []) for f in RULE_FIELDS if f != 'genre_names'})
     config['playlists'].append(entry)
@@ -111,6 +136,7 @@ def add_playlist(name, playlist_id, genre_names, **rules):
     return entry
 
 
+@_locked
 def update_playlist(entry_id, changes):
     config = load_config()
     for entry in config['playlists']:
@@ -121,12 +147,14 @@ def update_playlist(entry_id, changes):
     raise KeyError(entry_id)
 
 
+@_locked
 def delete_playlist(entry_id):
     config = load_config()
     config['playlists'] = [p for p in config['playlists'] if p['id'] != entry_id]
     save_config(config)
 
 
+@_locked
 def reorder_playlists(entry_ids):
     config = load_config()
     by_id = {p['id']: p for p in config['playlists']}
@@ -136,6 +164,7 @@ def reorder_playlists(entry_ids):
     return config
 
 
+@_locked
 def set_artist_rule(artist_id, artist_name, entry_id):
     config = load_config()
     if entry_id:
@@ -145,6 +174,7 @@ def set_artist_rule(artist_id, artist_name, entry_id):
     save_config(config)
 
 
+@_locked
 def update_settings(changes):
     config = load_config()
     for key in ('music_dir', 'audio_format', 'fallback_genre', 'artist_history', 'multi_playlist', 'download', 'layout',

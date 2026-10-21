@@ -1,3 +1,5 @@
+import { Subscription } from 'rxjs';
+import { EventsService } from 'src/app/services/events.service';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
@@ -40,12 +42,25 @@ export class SetupComponent implements OnInit, OnDestroy {
   artistRules: { [id: string]: { name: string; playlist: string } } = {};
   rulesEdited = false;
   evaluation: JobState | null = null;
-  private poll: any = null;
+  private subscriptions: Subscription[] = [];
 
-  constructor(private playlistService: PlaylistService, private router: Router, private route: ActivatedRoute) { }
+  constructor(private playlistService: PlaylistService, private router: Router, private route: ActivatedRoute,
+              private events: EventsService) { }
 
   ngOnInit(): void {
     this.loadStatus();
+    // The analyses and the Spotify login report through the backend's stream.
+    this.subscriptions.push(
+      this.events.job('setup').subscribe(job => {
+        this.job = job;
+        if (!job.running) this.analysisDone();
+      }),
+      this.events.job('reevaluate').subscribe(job => {
+        this.evaluation = job;
+        if (!job.running) this.evaluationDone();
+      }),
+      this.events.on('status').subscribe(() => this.loadStatus()),
+    );
     this.playlistService.getConfig().subscribe(config => {
       config.playlists.forEach(p => {
         const id = p.playlist_id || 'app:' + p.id;
@@ -59,18 +74,16 @@ export class SetupComponent implements OnInit, OnDestroy {
     this.playlistService.getSetupAnalysis().subscribe(state => {
       if (state.job.running) {
         this.step = 'analysing';
-        this.startPolling();
+        this.job = state.job;
       }
     });
   }
 
   ngOnDestroy(): void {
-    clearInterval(this.poll);
-    clearInterval(this.loginPoll);
+    this.subscriptions.forEach(s => s.unsubscribe());
   }
 
   backendDown = false;
-  private loginPoll: any = null;
 
   loadStatus(): void {
     this.playlistService.getSetupStatus().subscribe({
@@ -78,10 +91,6 @@ export class SetupComponent implements OnInit, OnDestroy {
         this.backendDown = false;
         this.status = status;
         this.reconfiguring = status.configured;
-        if (status.spotify.connected) {
-          clearInterval(this.loginPoll);
-          this.loginPoll = null;
-        }
         // Sorting setup (from Sort Playlists): needs playlists, from Spotify or an imported file.
         if (status.spotify.connected || status.playlists) {
           if (!this.playlists.length) this.loadPlaylists();
@@ -97,8 +106,6 @@ export class SetupComponent implements OnInit, OnDestroy {
   login(): void {
     this.playlistService.spotifyLogin().subscribe(() => {
       if (this.status) this.status.spotify.logging_in = true;
-      clearInterval(this.loginPoll);
-      this.loginPoll = setInterval(() => this.loadStatus(), 2000);
     });
   }
 
@@ -135,30 +142,24 @@ export class SetupComponent implements OnInit, OnDestroy {
     this.step = 'analysing';
     this.job = { running: true, step: 'Starting' };
     this.playlistService.startSetupAnalysis(chosen, this.multiPlaylist).subscribe({
-      next: () => this.startPolling(),
-      error: () => this.startPolling(),
+      error: () => this.analysisDone(),
     });
   }
 
-  private startPolling(): void {
-    clearInterval(this.poll);
-    this.poll = setInterval(() => {
-      this.playlistService.getSetupAnalysis().subscribe(state => {
-        this.job = state.job;
-        if (!state.job.running) {
-          clearInterval(this.poll);
-          if (!state.job.error && state.proposal) {
-            this.proposal = state.proposal.playlists;
-            this.stats = state.proposal.stats;
-            this.multiPlaylist = !!state.proposal.multi_playlist;
-            if (!this.proposal.some(p => p.name === this.fallbackGenre)) {
-              this.fallbackGenre = this.proposal.find(p => p.name.toLowerCase() === 'other')?.name || '';
-            }
-            this.step = 'review';
-          }
+  /** The analysis is done (or could not start): its proposal is read once. */
+  private analysisDone(): void {
+    this.playlistService.getSetupAnalysis().subscribe(state => {
+      this.job = state.job;
+      if (!state.job.running && !state.job.error && state.proposal) {
+        this.proposal = state.proposal.playlists;
+        this.stats = state.proposal.stats;
+        this.multiPlaylist = !!state.proposal.multi_playlist;
+        if (!this.proposal.some(p => p.name === this.fallbackGenre)) {
+          this.fallbackGenre = this.proposal.find(p => p.name.toLowerCase() === 'other')?.name || '';
         }
-      });
-    }, 1200);
+        this.step = 'review';
+      }
+    });
   }
 
   get averageAccuracy(): number {
@@ -205,26 +206,19 @@ export class SetupComponent implements OnInit, OnDestroy {
   recheck(): void {
     this.evaluation = { running: true, step: 'Starting' };
     this.playlistService.evaluateSetup(this.proposal, this.multiPlaylist).subscribe({
-      next: () => this.pollEvaluation(),
-      error: () => this.pollEvaluation(),
+      error: () => this.evaluationDone(),
     });
   }
 
-  private pollEvaluation(): void {
-    clearInterval(this.poll);
-    this.poll = setInterval(() => {
-      this.playlistService.getSetupAnalysis().subscribe(state => {
-        this.evaluation = state.evaluation;
-        if (!state.evaluation.running) {
-          clearInterval(this.poll);
-          if (!state.evaluation.error && state.proposal) {
-            this.stats = state.proposal.stats;
-            this.applied = new Set();
-            this.rulesEdited = false;
-          }
-        }
-      });
-    }, 1200);
+  private evaluationDone(): void {
+    this.playlistService.getSetupAnalysis().subscribe(state => {
+      this.evaluation = state.evaluation;
+      if (!state.evaluation.running && !state.evaluation.error && state.proposal) {
+        this.stats = state.proposal.stats;
+        this.applied = new Set();
+        this.rulesEdited = false;
+      }
+    });
   }
 
   removeFromProposal(p: GenrePlaylist): void {

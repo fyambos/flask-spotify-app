@@ -73,7 +73,9 @@ export interface SpotifyPlaylist {
 }
 
 export interface ImportStatus {
-  source: 'spotify' | 'tunemymusic' | 'spotify-export' | null;
+  source: 'spotify' | 'tunemymusic' | 'spotify-export' | 'exportify' | null;
+  /** The playlists come from this file (Spotify can't be read, or the file is from another service). */
+  from_file: boolean;
   file: string | null;
   updated_at: string | null;
   days: number | null;
@@ -93,6 +95,8 @@ export interface SpotifySyncChange {
   entry_id: string;
   name: string;
   create: boolean;
+  /** Deleted on Spotify: nothing is written to it. */
+  missing?: boolean;
   to_add: string[];
   removed_on_spotify: string[];
 }
@@ -149,6 +153,8 @@ export interface JobState {
   total?: number;
   current?: string[];
   error?: string | null;
+  /** Values of the error's text (errorText). */
+  error_params?: { [key: string]: string } | null;
 }
 
 export interface SetupAnalysis {
@@ -163,7 +169,16 @@ export interface AccuracyState {
   rules_hash: string;
 }
 
+export interface Devices {
+  available: boolean;
+  /** null: unknown (both ways are offered). */
+  subscription?: boolean | null;
+  iphone?: boolean;
+}
+
 export interface LibraryTrack {
+  /** Values of the error's text (errorText). */
+  error_params?: { [key: string]: string } | null;
   track_id: string;
   title: string;
   artists: string[];
@@ -171,9 +186,19 @@ export interface LibraryTrack {
   image_url?: string | null;
   folder: string;
   path: string | null;
-  status: 'ok' | 'failed' | 'removed';
+  status: 'ok' | 'failed' | 'removed' | 'ignored';
   error?: string;
   removed_at?: string;
+}
+
+export interface YouTubeMatch {
+  url: string;
+  title: string;
+  artists: string[];
+  album: string | null;
+  duration: string;
+  thumbnail: string | null;
+  kind: 'song' | 'video';
 }
 
 export interface ImportResult {
@@ -191,13 +216,19 @@ export interface LibraryState {
   import: ImportResult | null;
   /** Apple Music on macOS, iTunes on Windows. */
   apple_music: { available: boolean; app: 'Apple Music' | 'iTunes' | null; job: JobState };
+  /** The download of a song chosen by hand. */
+  chosen: JobState;
   platform: string;
   music_dir: string;
+  /** Folders of the playlists in Apple Music / iTunes. */
+  player_folders: string[];
   downloaded: number;
   failed: LibraryTrack[];
   removed: LibraryTrack[];
+  /** Left out of the downloads by hand. */
+  ignored: LibraryTrack[];
   playlists: number;
-  plan: { generated_at: string; to_download: number; to_move: number; to_remove: number; wrong_length: number; playlists: number; moves_folder: boolean } | null;
+  plan: { generated_at: string; source: string | null; file: string | null; unreadable: string[]; to_download: number; to_move: number; to_remove: number; wrong_length: number; duplicates: number; playlists: number; moves_folder: boolean } | null;
 }
 
 export interface LikesState {
@@ -293,6 +324,30 @@ export class PlaylistService {
   getLayoutExample(): Observable<LayoutExample> {
     return this.http.get<LayoutExample>(`${this.apiUrl}/library/example`);
   }
+  getMatches(trackId: string): Observable<{ results: YouTubeMatch[] }> {
+    return this.http.get<{ results: YouTubeMatch[] }>(`${this.apiUrl}/library/matches/${trackId}`);
+  }
+  chooseMatch(trackId: string, url: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/library/matches/${trackId}`, { url });
+  }
+  /** Ignore a song in the next syncs, or not any more. */
+  ignoreTrack(trackId: string, ignored: boolean): Observable<any> {
+    const url = `${this.apiUrl}/library/ignored/${trackId}`;
+    return ignored ? this.http.post<any>(url, {}) : this.http.delete<any>(url);
+  }
+  /** Apple Music subscription and iPhone plugged in (macOS). */
+  getDevices(): Observable<Devices> {
+    return this.http.get<Devices>(`${this.apiUrl}/devices`);
+  }
+
+  openMusic(): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/devices/music`, {});
+  }
+
+  openFinder(): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/devices/finder`, {});
+  }
+
   revealLibrary(): Observable<void> {
     return this.http.post<void>(`${this.apiUrl}/library/reveal`, {});
   }

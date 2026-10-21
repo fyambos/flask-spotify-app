@@ -16,22 +16,22 @@
   </div>
 </div>
 <div *ngIf="state?.job?.error || state?.watch?.error" class="mt-6 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700 ring-1 ring-rose-600/10">
-  {{ state?.job?.error || state?.watch?.error }}
+  {{ (state?.job?.error || state?.watch?.error) | errorText: state?.job?.error_params }}
 </div>
 
 <!-- Last import -->
-<div *ngIf="state?.result as r" class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl bg-brand-50 p-4 text-sm text-brand-800 ring-1 ring-brand-600/10">
+<ng-container *ngIf="state?.result as r">
+<div *ngIf="inUse(r.file)" class="mt-6 flex flex-wrap items-center gap-3 rounded-2xl bg-brand-50 p-4 text-sm text-brand-800 ring-1 ring-brand-600/10">
   <lucide-icon name="check-circle-2" [size]="18"></lucide-icon>
   <span class="flex-1">
-    Imported {{ r.file }}: {{ r.songs }} songs in {{ r.playlists }} playlists.
-    <ng-container *ngIf="r.songs_added || r.songs_removed">{{ r.songs_added }} new songs, {{ r.songs_removed }} removed.</ng-container>
-    <ng-container *ngIf="r.playlists_added.length">New playlists: {{ r.playlists_added.join(', ') }}.</ng-container>
-    <ng-container *ngIf="r.first">Choose the playlists to download, then Sync in Library.</ng-container>
-    <ng-container *ngIf="!r.first && !r.synced">{{ r.to_download }} songs to download. Sync in Library.</ng-container>
+    Imported {{ r.file }}.
+    <ng-container *ngIf="r.first">&#32;Choose the playlists to download.</ng-container>
+    <ng-container *ngIf="!r.first && !r.synced">&#32;{{ r.to_download }} songs to download.</ng-container>
   </span>
   <a *ngIf="r.first" routerLink="/settings" fragment="downloads" class="btn-primary px-3 py-1.5">Playlists to download</a>
   <a routerLink="/library" class="btn-outline bg-white px-3 py-1.5">Library</a>
 </div>
+</ng-container>
 
 <!-- TuneMyMusic -->
 <section class="card mt-6 p-6">
@@ -72,6 +72,30 @@
           Waiting for the file in {{ folder || 'Downloads' }}
         </div>
       </div>
+    </li>
+  </ol>
+</section>
+
+<!-- Exportify -->
+<section class="card mt-4 p-6">
+  <h2 class="font-semibold">Exportify</h2>
+  <p class="mt-0.5 text-sm text-zinc-500">Free. Exports Spotify playlists to a file.</p>
+  <ol class="mt-5 space-y-4 text-sm">
+    <li class="flex gap-3">
+      <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-700">1</span>
+      <div>
+        <a href="https://exportify.net" target="_blank" rel="noopener" class="btn-outline">
+          Open Exportify <lucide-icon name="external-link" [size]="14"></lucide-icon>
+        </a>
+      </div>
+    </li>
+    <li class="flex gap-3">
+      <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-700">2</span>
+      <div class="pt-0.5">Click Get Started and log in to Spotify.</div>
+    </li>
+    <li class="flex gap-3">
+      <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-700">3</span>
+      <div class="pt-0.5">Click Export All, then save the zip file in your Downloads folder. It is imported automatically.</div>
     </li>
   </ol>
 </section>

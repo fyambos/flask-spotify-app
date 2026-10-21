@@ -1,13 +1,14 @@
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 import requests
@@ -15,16 +16,30 @@ import requests
 import apple_music
 import catalog as catalog_store
 import config_store
+import devices
 import downloads_watch
+import errors
+import events
 import library
 import setup_analysis
 import sort_state
 import sorter
 from spotify_client import SpotifyLimitError, blocked, create_client, keys_present, logged_in, playlist_meta
+from spotify_client import me as spotify_me
 
 load_dotenv()
 app = Flask(__name__)
-CORS(app)
+# The backend has no login: only pages served from this computer may call it (any port), and tools
+# without a browser (no Origin). A page of another site open in the browser can't drive it.
+LOCAL_ORIGIN = re.compile(r'https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$')
+CORS(app, origins=[LOCAL_ORIGIN])
+
+
+@app.before_request
+def refuse_other_sites():
+    origin = request.headers.get('Origin')
+    if origin and not LOCAL_ORIGIN.match(origin):
+        return jsonify({'error': 'forbidden'}), 403
 
 class _LazySpotify:
     """The Spotify client, created on first use, so the backend starts without keys."""
@@ -39,16 +54,17 @@ class _LazySpotify:
 
 
 sp = _LazySpotify()
-likes_job = sorter.Job(sorter.build_preview)
-setup_job = sorter.Job(setup_analysis.analyse)
-accuracy_job = sorter.Job(setup_analysis.check_accuracy)
-reevaluate_job = sorter.Job(setup_analysis.reevaluate)
-library_job = sorter.Job(library.sync)
-import_job = sorter.Job(library.import_files)
+likes_job = sorter.Job(sorter.build_preview, 'likes')
+setup_job = sorter.Job(setup_analysis.analyse, 'setup')
+accuracy_job = sorter.Job(setup_analysis.check_accuracy, 'accuracy')
+reevaluate_job = sorter.Job(setup_analysis.reevaluate, 'reevaluate')
+library_job = sorter.Job(library.sync, 'library')
+import_job = sorter.Job(library.import_files, 'import')
 import itunes_windows
 # Apple Music on macOS, iTunes on Windows.
-apple_job = sorter.Job(apple_music.update if apple_music.available() else itunes_windows.update)
-spotify_sync_job = sorter.Job(lambda sp, progress: sort_state.push(sp, catalog_store.refresh_from_spotify(sp, progress), progress))
+apple_job = sorter.Job(apple_music.update if apple_music.available() else itunes_windows.update, 'apple')
+spotify_sync_job = sorter.Job(lambda sp, progress: sort_state.push(sp, catalog_store.refresh_from_spotify(sp, progress), progress),
+                              'spotify_sync')
 
 
 AUTO_SYNC_MAX = 200  # songs; above it, or on the first import, the Sync waits for the user
@@ -72,12 +88,20 @@ def _import_and_sync(sp, progress, path):
         library.sync(sp, progress, apply=True)
 
 
-file_import_job = sorter.Job(_import_and_sync)
+file_import_job = sorter.Job(_import_and_sync, 'file_import')
+chosen_job = sorter.Job(library.download_chosen, 'chosen')
+# Jobs that write the library (library.json, files, Apple Music): only one at a time.
+LIBRARY_JOBS = (library_job, import_job, file_import_job, apple_job, chosen_job)
+BUSY = 'busy'
+
+
+def _library_busy():
+    return any(job.state.get('running') for job in LIBRARY_JOBS)
 
 
 def _on_downloaded_file(path):
-    if library_job.state.get('running') or import_job.state.get('running') or file_import_job.state.get('running'):
-        raise RuntimeError('Wait for the current sync to finish, then import the file again.')
+    if _library_busy():
+        raise downloads_watch.Busy()  # imported once the current job is done
     file_import_job.start(sp, path=str(path))
 
 
@@ -86,16 +110,20 @@ downloads_watch.start(_on_downloaded_file)
 
 @app.errorhandler(Exception)
 def handle_error(e):
+    """Every error reaches the page as a code (the page has the texts)."""
     if isinstance(e, HTTPException):
         return e
-    if isinstance(e, SpotifyLimitError):
-        app.logger.warning('%s %s: %s', request.method, request.path, e)
-        return jsonify({'error': str(e)}), 503
-    if isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
-        app.logger.warning('%s %s: Spotify did not respond (%s)', request.method, request.path, type(e).__name__)
-        return jsonify({'error': 'Spotify did not respond. Try again in a moment.'}), 503
-    app.logger.exception(e)
-    return jsonify({'error': str(e)}), 400
+    code, params = errors.describe(e)
+    app.logger.warning('%s %s: %s', request.method, request.path, code)
+    status = 503 if code in ('spotify_limit', 'spotify_down', 'youtube_down', 'lastfm_down', 'no_internet') else 400
+    return jsonify({'error': code, 'params': params}), status
+
+
+@app.route('/events', methods=['GET'])
+def get_events():
+    """The pages' one stream: every job's state at each step, and 'status' when what the app can do changed."""
+    return Response(stream_with_context(events.stream()), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 # --- Local configuration (formerly Firestore) ---
@@ -129,11 +157,8 @@ def update_settings():
 def add_playlist():
     """A "sort into" playlist. Without playlist_id: a new playlist, only in the app until the next Spotify sync."""
     body = request.json
-    try:
-        rules = {f: body.get(f, []) for f in config_store.RULE_FIELDS if f != 'genre_names'}
-        entry = config_store.add_playlist(body.get('name', ''), body.get('playlist_id'), body.get('genre_names', []), **rules)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 409
+    rules = {f: body.get(f, []) for f in config_store.RULE_FIELDS if f != 'genre_names'}
+    entry = config_store.add_playlist(body.get('name', ''), body.get('playlist_id'), body.get('genre_names', []), **rules)
     return jsonify(entry), 201
 
 
@@ -142,7 +167,7 @@ def update_playlist(entry_id):
     try:
         return jsonify(config_store.update_playlist(entry_id, request.json))
     except KeyError:
-        return jsonify({'error': 'Playlist not found'}), 404
+        return jsonify({'error': 'unexpected'}), 404
 
 
 @app.route('/config/playlists/<entry_id>', methods=['DELETE'])
@@ -182,7 +207,7 @@ login_state = {'running': False}
 def spotify_login():
     """Opens the Spotify login page in the browser and waits for it in the background."""
     if not _keys_present():
-        return jsonify({'error': 'Spotify keys are missing in src/backend/.env.'}), 400
+        return jsonify({'error': 'spotify_keys_missing'}), 400
     if login_state['running']:
         return jsonify(login_state), 202
 
@@ -194,6 +219,7 @@ def spotify_login():
             app.logger.warning('Spotify login: %s', e)
         finally:
             login_state['running'] = False
+            events.publish('status')
 
     import threading
     threading.Thread(target=run, daemon=True).start()
@@ -209,10 +235,13 @@ def _import_status(catalog, config):
     days = None
     if catalog.get('updated_at'):
         days = (datetime.now() - datetime.fromisoformat(catalog['updated_at'])).days
-    from_file = source in ('tunemymusic', 'spotify-export')
+    # A file read in place of Spotify is not used any more once Spotify can be read: no reminder then.
+    from_file = source in catalog_store.FILE_SOURCES and not (
+        _keys_present() and _logged_in() and not blocked() and catalog_store.follows_spotify(catalog))
     return {
         'source': source,
         'file': catalog.get('file'),
+        'from_file': from_file,
         'updated_at': catalog.get('updated_at'),
         'days': days,
         'reminder': bool(from_file and config.get('import_reminder', True) and days is not None and days > REMINDER_DAYS),
@@ -226,7 +255,7 @@ def setup_status():
     catalog = catalog_store.load()
     if not catalog.get('source'):
         catalog = catalog_store.from_last_check() or catalog
-    base = {'lastfm': bool(os.getenv('LASTFM_API_KEY')), 'ffmpeg': shutil.which('ffmpeg') is not None,
+    base = {'lastfm': bool(os.getenv('LASTFM_API_KEY')), 'ffmpeg': library.ffmpeg_path() is not None,
             'configured': bool(config['playlists']), 'playlists': catalog.get('source') is not None,
             'import': _import_status(catalog, config),
             'sort': {'pending': sort_state.pending_count(catalog, config) if catalog.get('source') else 0,
@@ -241,15 +270,15 @@ def setup_status():
         try:
             sp.me()
         except SpotifyLimitError as e:
-            return jsonify({**base, 'spotify': {'connected': True, 'name': None, 'limit': str(e)}})
+            return jsonify({**base, 'spotify': {'connected': True, 'name': None, 'limit': errors.describe(e)[1]['until']}})
     try:
-        me = sp.me()
+        me = spotify_me(sp)
         spotify = {'connected': True, 'name': me.get('display_name') or me.get('id'),
                    'image_url': (me.get('images') or [{}])[0].get('url')}
     except SpotifyLimitError as e:
-        spotify = {'connected': True, 'name': None, 'limit': str(e)}
+        spotify = {'connected': True, 'name': None, 'limit': errors.describe(e)[1]['until']}
     except Exception as e:
-        spotify = {'connected': False, 'error': str(e)}
+        spotify = {'connected': False, 'error': errors.describe(e)[0]}
     return jsonify({**base, 'spotify': spotify})
 
 
@@ -275,15 +304,15 @@ def import_playlists_file():
     """An exported file chosen by hand (uploaded from the page)."""
     upload = request.files.get('file')
     if not upload:
-        return jsonify({'error': 'No file'}), 400
+        return jsonify({'error': 'unexpected'}), 400
     folder = config_store.DATA_DIR / 'imports'
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / Path(upload.filename or 'playlists.csv').name
     upload.save(path)
     if not catalog_store.detect(path):
-        return jsonify({'error': 'This file is not a TuneMyMusic CSV export or a Spotify data export.'}), 400
-    if library_job.state.get('running') or import_job.state.get('running'):
-        return jsonify({'error': 'Wait for the current sync to finish'}), 409
+        return jsonify({'error': 'not_an_export'}), 400
+    if _library_busy():
+        return jsonify({'error': BUSY}), 409
     started = file_import_job.start(sp, path=str(path))
     return jsonify({'started': started, **file_import_job.state}), 202 if started else 409
 
@@ -293,7 +322,7 @@ def import_playlists_file():
 @app.route('/sort/spotify', methods=['GET'])
 def get_spotify_sync():
     """What "Sync with Spotify" would do (reads Spotify, writes nothing)."""
-    if not (_keys_present() and _logged_in()) or catalog_store.load().get('source') not in (None, 'spotify'):
+    if not (_keys_present() and _logged_in()) or not catalog_store.follows_spotify(catalog_store.load()):
         return jsonify({'available': False, 'changes': [], 'job': spotify_sync_job.state})
     catalog = catalog_store.refresh_from_spotify(sp)
     return jsonify({'available': True, 'changes': sort_state.plan_sync(catalog), 'job': spotify_sync_job.state})
@@ -353,25 +382,26 @@ def get_accuracy():
 
 @app.route('/library', methods=['GET'])
 def get_library():
-    job = next((j.state for j in (file_import_job, import_job) if j.state.get('running')), library_job.state)
+    # The job started last (its error stays shown once it is done).
+    job = max((j.state for j in (library_job, file_import_job, import_job)), key=lambda state: state.get('started_at', 0))
     app_name = 'Apple Music' if apple_music.available() else 'iTunes' if itunes_windows.available() else None
     return jsonify({'job': job, 'import': library.load_import_result(), 'apple_music': {
-        'available': app_name is not None, 'app': app_name, 'job': apple_job.state},
+        'available': app_name is not None, 'app': app_name, 'job': apple_job.state}, 'chosen': chosen_job.state,
         'platform': platform.system(), **library.summary()})
 
 
 @app.route('/library/apple-music', methods=['POST'])
 def update_apple_music():
-    if library_job.state.get('running') or import_job.state.get('running'):
-        return jsonify({'error': 'Wait for the current sync or import to finish'}), 409
+    if _library_busy():
+        return jsonify({'error': BUSY}), 409
     started = apple_job.start(sp)
     return jsonify({'started': started, **apple_job.state}), 202 if started else 409
 
 
 @app.route('/library/import', methods=['POST'])
 def import_library():
-    if library_job.state.get('running'):
-        return jsonify({'error': 'A sync is running'}), 409
+    if _library_busy():
+        return jsonify({'error': BUSY}), 409
     body = request.json
     started = import_job.start(sp, source=body['path'], mode=body.get('mode', 'copy'))
     return jsonify({'started': started, **import_job.state}), 202 if started else 409
@@ -379,18 +409,43 @@ def import_library():
 
 @app.route('/library/check', methods=['POST'])
 def check_library():
-    if import_job.state.get('running') or file_import_job.state.get('running'):
-        return jsonify({'error': 'An import is running'}), 409
+    if _library_busy():
+        return jsonify({'error': BUSY}), 409
     started = library_job.start(sp, apply=False)
     return jsonify({'started': started, **library_job.state}), 202 if started else 409
 
 
 @app.route('/library/sync', methods=['POST'])
 def sync_library():
-    if import_job.state.get('running') or file_import_job.state.get('running'):
-        return jsonify({'error': 'An import is running'}), 409
+    if _library_busy():
+        return jsonify({'error': BUSY}), 409
     started = library_job.start(sp, apply=True)
     return jsonify({'started': started, **library_job.state}), 202 if started else 409
+
+
+@app.route('/library/matches/<track_id>', methods=['GET'])
+def get_matches(track_id):
+    """YouTube Music results for a song not found, to choose the right one by hand."""
+    return jsonify({'results': library.youtube_candidates(track_id)})
+
+
+@app.route('/library/matches/<track_id>', methods=['POST'])
+def choose_match(track_id):
+    """A result or a pasted link: the song is downloaded from it at once."""
+    if _library_busy():
+        return jsonify({'error': BUSY}), 409
+    library.choose_match(track_id, request.json.get('url', ''))
+    chosen_job.start(sp, track_id=track_id)
+    return jsonify({'started': True}), 202
+
+
+@app.route('/library/ignored/<track_id>', methods=['POST', 'DELETE'])
+def ignore_track(track_id):
+    """Ignore this song in the next syncs (POST), or not any more (DELETE)."""
+    if _library_busy():
+        return jsonify({'error': BUSY}), 409
+    library.ignore(track_id, ignored=request.method == 'POST')
+    return jsonify(library.summary())
 
 
 @app.route('/library/example', methods=['GET'])
@@ -422,6 +477,24 @@ def _display_path(path):
     return str(path)
 
 
+@app.route('/devices', methods=['GET'])
+def get_devices():
+    """Apple Music subscription and iPhone plugged in, for the iPhone card of Library (macOS)."""
+    return jsonify(devices.status())
+
+
+@app.route('/devices/music', methods=['POST'])
+def open_music():
+    devices.open_music()
+    return '', 204
+
+
+@app.route('/devices/finder', methods=['POST'])
+def open_finder():
+    devices.open_finder()
+    return '', 204
+
+
 @app.route('/library/reveal', methods=['POST'])
 def reveal_library():
     root = library.music_root(config_store.load_config())
@@ -450,13 +523,15 @@ def resolve_review(track_id):
     try:
         item = sorter.resolve_review(track_id, body['playlist'], body.get('remember_artist', False))
     except KeyError:
-        return jsonify({'error': 'Track not found in preview'}), 404
+        return jsonify({'error': 'unexpected'}), 404
     return jsonify(item)
 
 
 @app.route('/likes/apply', methods=['POST'])
 def apply_likes():
-    return jsonify({'added': sorter.apply_preview(sp)})
+    if likes_job.state.get('running'):
+        return jsonify({'error': 'analysis_running'}), 409
+    return jsonify(sorter.apply_preview(sp))
 
 
 # --- Spotify ---
@@ -471,7 +546,7 @@ def get_playlists():
     if not catalog.get('source'):
         catalog = catalog_store.from_last_check() or catalog
     fresh = catalog.get('updated_at') and (datetime.now() - datetime.fromisoformat(catalog['updated_at'])).total_seconds() < CATALOG_TTL
-    if _keys_present() and _logged_in() and catalog.get('source') in (None, 'spotify') and not fresh and not blocked():
+    if _keys_present() and _logged_in() and catalog_store.follows_spotify(catalog) and not fresh and not blocked():
         try:
             catalog = catalog_store.refresh_from_spotify(sp)
         except SpotifyLimitError:
@@ -529,6 +604,29 @@ def get_recently_played():
     return jsonify(track_data)
 
 
+def _reload_when_idle():
+    """Flask's reloader restarts the backend as soon as its code changes, which stopped a Sync or a
+    download halfway: it now waits until no job is running."""
+    import time
+    import werkzeug._reloader as reloader
+
+    def waiting(trigger):
+        def when_idle(self, filename):
+            jobs = [job for job in globals().values() if isinstance(job, sorter.Job)]
+            while any(job.state.get('running') for job in jobs) or login_state['running']:
+                time.sleep(1)
+            trigger(self, filename)
+        return when_idle
+
+    # The stat and the watchdog reloaders each have their own trigger.
+    for loop in [reloader.ReloaderLoop, *reloader.ReloaderLoop.__subclasses__()]:
+        if 'trigger_reload' in vars(loop):
+            loop.trigger_reload = waiting(vars(loop)['trigger_reload'])
+
+
 if __name__ == '__main__':
+    _reload_when_idle()
     # Port 5000 is taken by AirPlay Receiver on macOS.
-    app.run(port=int(os.getenv('PORT', 5001)), debug=True)
+    # The reloader also restarts on *.zip: an imported zip saved in data/ would stop the running job.
+    data = str(config_store.DATA_DIR)
+    app.run(port=int(os.getenv('PORT', 5001)), debug=True, exclude_patterns=[f'{data}/*', f'{data}/*/*'])

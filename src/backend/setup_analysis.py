@@ -191,7 +191,7 @@ def analyse(sp, progress=None, playlists=(), multi_playlist=None):
     data = []
     for i, p in enumerate(playlists, 1):
         progress(step=f"Reading {p['name']}", done=i - 1, total=len(playlists))
-        tracks = catalog_store.tracks_of(catalog, p['playlist_id'])
+        tracks = catalog_store.read_playlist(sp, catalog, p['playlist_id'])
         genres = []
         for j, track in enumerate(tracks, 1):
             genres.append(resolver.track_genres(track))
@@ -517,7 +517,7 @@ def _read_playlists(sp, playlists, resolver, progress):
     data = []
     for i, p in enumerate(playlists, 1):
         progress(step=f"Reading {p['name']}", done=i - 1, total=len(playlists))
-        tracks = catalog_store.tracks_of(catalog, sort_state.playlist_key(p))
+        tracks = catalog_store.read_playlist(sp, catalog, sort_state.playlist_key(p))
         data.append({'id': p['id'], 'name': p['name'], 'playlist_id': p['playlist_id'], 'tracks': tracks,
                      'genres': [resolver.track_genres(t) for t in tracks]})
     resolver.save()
@@ -567,17 +567,16 @@ def load_accuracy():
 
 def apply_proposal(entries, fallback_genre=None, multi_playlist=None):
     """Replace the genre playlists of the config by the accepted ones (in this order)."""
-    config = config_store.load_config()
-    config['playlists'] = [
-        {'id': e.get('id') or config_store._new_id(), 'name': e['name'], 'playlist_id': e['playlist_id'],
-         **{f: e.get(f, []) for f in config_store.RULE_FIELDS}}
-        for e in entries
-    ]
-    if fallback_genre is not None:
-        config['fallback_genre'] = fallback_genre
-    if multi_playlist is not None:
-        config['multi_playlist'] = bool(multi_playlist)
-    config_store.save_config(config)
+    with config_store.editing() as config:
+        config['playlists'] = [
+            {'id': e.get('id') or config_store._new_id(), 'name': e['name'], 'playlist_id': e['playlist_id'],
+             **{f: e.get(f, []) for f in config_store.RULE_FIELDS}}
+            for e in entries
+        ]
+        if fallback_genre is not None:
+            config['fallback_genre'] = fallback_genre
+        if multi_playlist is not None:
+            config['multi_playlist'] = bool(multi_playlist)
 
     # The proposal's accuracy is still valid if its rules were accepted as they are.
     proposal = load_proposal()

@@ -1,8 +1,11 @@
+import { errorText } from 'src/app/services/errors';
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { EventsService } from 'src/app/services/events.service';
 import { ImportState, PlaylistService } from 'src/app/services/playlist.service';
 import { StatusService } from 'src/app/services/status.service';
 
-/** Import playlists from a file: TuneMyMusic CSV (any streaming service) or the Spotify data export. */
+/** Import playlists from a file: TuneMyMusic CSV (any streaming service), Exportify or the Spotify data export. */
 @Component({
   selector: 'app-import',
   templateUrl: './import.component.html',
@@ -12,27 +15,40 @@ export class ImportComponent implements OnInit, OnDestroy {
   folder = '';
   uploading = false;
   uploadError = '';
-  private poll: any = null;
+  private subscriptions: Subscription[] = [];
 
-  constructor(private playlistService: PlaylistService, private statusService: StatusService) { }
+  constructor(private playlistService: PlaylistService, private statusService: StatusService, private events: EventsService) { }
 
   ngOnInit(): void {
     // While this page is open, the Downloads folder is watched for the exported file.
     this.playlistService.watchDownloads().subscribe(res => this.folder = res.folder);
     this.refresh();
-    this.poll = setInterval(() => this.refresh(), 2000);
+    // The import's steps come from the backend; the page is read again once it is done, or when
+    // the Downloads watch found a file.
+    this.subscriptions.push(
+      this.events.job('file_import').subscribe(job => {
+        if (this.state) this.state = { ...this.state, job };
+        if (!job.running) {
+          this.refresh();
+          this.statusService.refresh();  // playlists imported: the menu and the other pages change
+        }
+      }),
+      this.events.on('watch').subscribe(() => this.refresh()),
+    );
   }
 
   ngOnDestroy(): void {
-    clearInterval(this.poll);
+    this.subscriptions.forEach(s => s.unsubscribe());
   }
 
   refresh(): void {
-    const wasRunning = this.state?.job.running;
-    this.playlistService.getImport().subscribe(state => {
-      this.state = state;
-      if (wasRunning && !state.job.running) this.statusService.refresh();
-    });
+    this.playlistService.getImport().subscribe(state => this.state = state);
+  }
+
+  /** The last import is shown only while its file is where the playlists come from. */
+  inUse(file: string): boolean {
+    const current = this.statusService.status?.import;
+    return !!current?.from_file && current.file === file;
   }
 
   upload(event: Event): void {
@@ -42,7 +58,7 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.uploadError = '';
     this.playlistService.uploadPlaylistsFile(file).subscribe({
       next: () => { this.uploading = false; this.refresh(); },
-      error: (e) => { this.uploading = false; this.uploadError = e?.error?.error || 'This file could not be imported.'; },
+      error: (e) => { this.uploading = false; this.uploadError = e?.error?.error ? errorText(e.error.error, e.error.params) : 'This file could not be imported.'; },
     });
   }
 }

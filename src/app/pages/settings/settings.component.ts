@@ -30,7 +30,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     { id: 'artist_album', label: 'Artist / Album' },
     { id: 'artist', label: 'Artist' },
     { id: 'one_folder', label: 'One folder' },
-    { id: 'first_playlist', label: 'First playlist' },
+    { id: 'first_playlist', label: 'First playlist a song is in' },
   ];
   private statusSub: any;
 
@@ -49,7 +49,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.computeLists();
     });
     this.statusSub = this.statusService.status$.subscribe(status => {
-      this.fromFile = status?.import.source === 'tunemymusic' || status?.import.source === 'spotify-export';
+      this.fromFile = !!status?.import.from_file;
     });
     this.statusService.refresh();
     this.loadExample();

@@ -56,3 +56,6 @@ src/backend/data/
 src/backend/firestore-export.json
 __pycache__/
 .venv/
+
+# Local development files
+.claude/

@@ -7,3 +7,8 @@ spotdl>=4.5.2
 mutagen>=1.47
 pywin32>=306; platform_system == "Windows"
 ytmusicapi
+send2trash>=1.8
+zhconv>=1.4
+# Come with the app, so nothing else has to be installed: a JavaScript runtime for yt-dlp, and ffmpeg.
+deno>=2.9
+imageio-ffmpeg>=0.6

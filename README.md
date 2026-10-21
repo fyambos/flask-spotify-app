@@ -16,10 +16,6 @@ Runs on your computer: a Flask backend (`src/backend`) and an Angular web app (`
 
 - Python 3.10+
 - Node.js 18+
-- ffmpeg
-  - Mac: `brew install ffmpeg`
-  - Windows: `winget install ffmpeg`
-  - Linux: `sudo apt install ffmpeg`
 - A Spotify account with **Premium** (required by Spotify for developer apps since February 2026)
 - Optional: a Last.fm API key (much better genres), a YouTube Music Premium account (256 kbps downloads)
 

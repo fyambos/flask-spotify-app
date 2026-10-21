@@ -155,7 +155,7 @@
         <select class="input" [(ngModel)]="config.removed.mode" (change)="saveSettings()">
           <option value="keep">Keep, shown as removed in the app</option>
           <option value="move">Move to a folder</option>
-          <option value="delete">Delete</option>
+          <option value="delete">Move to the Trash</option>
         </select>
         <input *ngIf="config.removed.mode === 'move'" class="input" [(ngModel)]="config.removed.folder" (change)="saveSettings()" placeholder="_Removed" />
       </div>

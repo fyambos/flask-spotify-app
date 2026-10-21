@@ -12,6 +12,7 @@ import {
 } from 'lucide-angular';
 
 import { AppRoutingModule } from './app-routing.module';
+import { ErrorTextPipe } from './pipes/error-text.pipe';
 import { AppComponent } from './app.component';
 import { ErrorInterceptor } from './services/error.interceptor';
 import { ConfirmDialogComponent } from './components/confirm-dialog/confirm-dialog.component';
@@ -44,6 +45,7 @@ import { ImportComponent } from './pages/import/import.component';
     LibraryComponent,
     HomeComponent,
     ImportComponent,
+    ErrorTextPipe,
   ],
   imports: [
     BrowserModule,

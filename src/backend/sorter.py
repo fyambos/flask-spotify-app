@@ -19,6 +19,10 @@ when it can; otherwise they wait for the "Sync with Spotify" screen.
 import json
 import re
 import threading
+import time
+
+import errors
+import events
 from collections import Counter, defaultdict
 from datetime import datetime
 
@@ -316,7 +320,7 @@ def write_to_spotify(sp, review=False):
     """
     from spotify_client import SpotifyLimitError, blocked, keys_present, logged_in
     stored = catalog_store.load()
-    if not (keys_present() and logged_in()) or blocked() or stored.get('source') not in (None, 'spotify'):
+    if not (keys_present() and logged_in()) or blocked() or not catalog_store.follows_spotify(stored):
         sort_state.set_waiting(True)
         return 'offline'
     try:
@@ -336,8 +340,9 @@ def write_to_spotify(sp, review=False):
 class Job:
     """Runs one task at a time in a background thread, with progress for the UI."""
 
-    def __init__(self, target):
+    def __init__(self, target, name):
         self.target = target
+        self.name = name  # topic of its events: the pages follow it on GET /events
         self.lock = threading.Lock()
         self.state = {'running': False}
 
@@ -345,21 +350,21 @@ class Job:
         with self.lock:
             if self.state.get('running'):
                 return False
-            self.state = {'running': True, 'step': 'Starting', 'done': 0, 'total': 0, 'error': None}
+            self.state = {'running': True, 'step': 'Starting', 'done': 0, 'total': 0, 'error': None,
+                          'started_at': time.time()}
+        events.publish(self.name, self.state)
         threading.Thread(target=self._run, args=(sp,), kwargs=kwargs, daemon=True).start()
         return True
 
     def _progress(self, **kw):
         self.state.update(kw)
+        events.publish(self.name, self.state)
 
     def _run(self, sp, **kwargs):
         try:
             self.target(sp, self._progress, **kwargs)
-        except Exception as e:  # reported to the UI
-            import requests
-            if isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
-                self.state['error'] = 'Spotify did not respond. Try again in a moment.'
-            else:
-                self.state['error'] = str(e)
+        except Exception as e:  # reported to the page as a code, written by the page
+            self.state['error'], self.state['error_params'] = errors.describe(e)
         finally:
             self.state['running'] = False
+            events.publish(self.name, self.state)

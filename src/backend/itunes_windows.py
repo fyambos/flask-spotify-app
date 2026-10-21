@@ -16,9 +16,11 @@ iTunes, so they must not be installed for this to work.
 Needs pywin32. The first launch of iTunes shows a license dialog, COM calls wait until it
 is accepted.
 """
+import os
 import platform
 
 import config_store
+from errors import AppError
 import library
 
 USER_PLAYLIST = 2   # ITPlaylistKind.ITPlaylistKindUser
@@ -99,13 +101,6 @@ def _folder(it, name, existing):
     return folder
 
 
-def _empty(pl):
-    tracks = pl.Tracks
-    # Delete by index from the end: deleting while enumerating fails.
-    for i in range(tracks.Count, 0, -1):
-        tracks.Item(i).Delete()
-
-
 def update(sp=None, progress=None):
     """Bring iTunes in line with the local library and the playlists of the last sync."""
     progress = progress or (lambda **kw: None)
@@ -114,12 +109,16 @@ def update(sp=None, progress=None):
     import pythoncom
     import win32com.client
 
+    import msvcrt
     pythoncom.CoInitialize()
-    try:
-        it = win32com.client.Dispatch('iTunes.Application')
-        return _update(it, progress)
-    finally:
-        pythoncom.CoUninitialize()
+    # Two updates at once each empty a playlist, then each fill it: a lock on a file makes them wait.
+    with open(config_store.DATA_DIR / 'itunes.lock', 'w') as lock:
+        msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+        try:
+            it = win32com.client.Dispatch('iTunes.Application')
+            return _update(it, progress)
+        finally:
+            pythoncom.CoUninitialize()
 
 
 def _update(it, progress):
@@ -128,7 +127,7 @@ def _update(it, progress):
     lib = library.load_library()
     plan = library.load_plan()
     if not plan:
-        raise RuntimeError('Run Check or Sync on the Library page first.')
+        raise AppError('sync_first')
     tracks = lib['tracks']
 
     ok = {tid: r for tid, r in tracks.items() if r['status'] == 'ok' and r.get('path')}
@@ -141,6 +140,12 @@ def _update(it, progress):
             try:
                 if (track.Location or '').lower() != path.lower():
                     track.Location = path  # the file moved
+                stat = os.stat(path)
+                stamp = [stat.st_size, int(stat.st_mtime)]
+                if record.get('itunes_file') not in (None, stamp):
+                    # Replaced at the same place (another version, a better quality): read again by iTunes.
+                    track.UpdateInfoFromFile()
+                record['itunes_file'] = stamp
                 continue
             except Exception:
                 track = None
@@ -152,6 +157,11 @@ def _update(it, progress):
     library.save_library(lib)
 
     progress(step='Removing songs no longer in the library')
+    # Tracks of duplicate files that went to the Recycle Bin.
+    for pid in lib.pop('itunes_remove', []):
+        track = _track(it, pid)
+        if track is not None:
+            track.Delete()
     for record in tracks.values():
         if record['status'] != 'ok' and record.get('itunes_id'):
             track = _track(it, record['itunes_id'])
@@ -166,10 +176,18 @@ def _update(it, progress):
     folders = config.get('playlist_folders') or {}
     default = config.get('default_folder') or ''
     contents = plan['playlists']
+    # Playlists of the app that are no longer downloaded are removed from iTunes
+    # (playlists the app never wrote are not touched).
+    for playlist_id in [sid for sid in links if sid not in contents]:
+        pid = links.pop(playlist_id)
+        if pid in existing:
+            existing.pop(pid)[0].Delete()
     for i, (playlist_id, info) in enumerate(contents.items(), 1):
         progress(step=f"Writing {info['name']} in iTunes", done=i, total=len(contents))
-        songs = [_track(it, tracks[t].get('itunes_id')) for t in info['track_ids'] if tracks.get(t, {}).get('itunes_id')]
-        songs = [s for s in songs if s is not None]
+        # Two Spotify ids (single and album) can share one file: it is added once.
+        pids = dict.fromkeys(tracks[t]['itunes_id'] for t in info['track_ids'] if tracks.get(t, {}).get('itunes_id'))
+        found = [(pid, song) for pid, song in ((pid, _track(it, pid)) for pid in pids) if song is not None]
+        songs = [song for _, song in found]
         pl = _find(it, playlist_id, info['name'], links, existing)
         if not songs:
             # Playlists without songs are deleted, not created.
@@ -184,15 +202,26 @@ def _update(it, progress):
             pid = _pid(it, pl)
             existing[pid] = (pl, info['name'], folder_name, 0)
         else:
-            _empty(pl)
             if folder is not None:
                 try:
                     if pl.Parent is None or pl.Parent.Name != folder_name:
                         pl.Parent = folder
                 except Exception:
                     pass  # stays where it is
-        for song in songs:
-            pl.AddTrack(song)
+        # Only the songs removed and added are changed: emptying and filling a playlist of 1600 songs
+        # took minutes for one song changed. Songs added are put at the end.
+        wanted = {pid for pid, _ in found}
+        keep, entries = set(), pl.Tracks
+        for i in range(entries.Count, 0, -1):  # from the end: deleting while enumerating fails
+            entry = entries.Item(i)
+            pid = _pid(it, entry)
+            if pid in keep or pid not in wanted:
+                entry.Delete()  # removed from the playlist only, the song stays in iTunes
+            else:
+                keep.add(pid)
+        for pid, song in found:
+            if pid not in keep:
+                pl.AddTrack(song)
         links[playlist_id] = _pid(it, pl)
         library.save_library(lib)
 

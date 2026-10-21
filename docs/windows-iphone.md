@@ -6,7 +6,6 @@ So first you install what the app needs. Open PowerShell and run these one by on
 winget install Git.Git
 winget install Python.Python.3.14
 winget install OpenJS.NodeJS.LTS
-winget install Gyan.FFmpeg
 ```
 
 Then install iTunes from the Microsoft Store, open it once and accept the license. Don't install the Apple Music or Apple Devices apps: once they're installed, iTunes doesn't handle music anymore.
@@ -33,6 +32,8 @@ npm install
 npm start
 ```
 
+In PowerShell, `npm` runs a script that Windows blocks by default. To avoid changing your script policy, use `npm.cmd install` and `npm.cmd start` instead.
+
 Leave it open too, then go to http://localhost:4200 in your browser.
 
 ## In the app
@@ -40,7 +41,7 @@ Leave it open too, then go to http://localhost:4200 in your browser.
 1. Click Import from any streaming service, and leave that page open.
 2. Click Open TuneMyMusic, pick Spotify, log in and load your library. Unselect the playlists you don't want (playlists made by other people come with 500 songs max), then choose Export to file, CSV. Save the file in Downloads, the app imports it.
 3. Go to Settings, Playlists to download, and pick All my playlists or Choose playlists.
-4. Go to Library, click Check, then Sync. The songs go to Music\Music Sorter and into iTunes, with your playlists in a Music Sorter folder.
+4. Go to Library and click Sync. The songs go to Music\Music Sorter and into iTunes, with your playlists in a Music Sorter folder.
 
 ## On the iPhone
 

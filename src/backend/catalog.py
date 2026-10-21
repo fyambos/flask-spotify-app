@@ -67,6 +67,23 @@ def tracks_of(catalog, playlist_id):
     return [catalog['tracks'][t] for t in playlist['track_ids'] if t in catalog['tracks']]
 
 
+def read_playlist(sp, catalog, playlist_id):
+    """Songs of a playlist, read from Spotify when the catalog only has its size (not downloaded nor sorted)."""
+    playlist = catalog['playlists'].get(playlist_id) or {}
+    if catalog.get('source') == 'spotify' and playlist.get('total', 0) > len(playlist.get('track_ids', [])):
+        from spotify_client import playlist_tracks
+        items = playlist_tracks(sp, playlist_id)
+        for t in items:
+            catalog['tracks'].setdefault(t['id'], t)
+        playlist['track_ids'] = [t['id'] for t in items]
+        stored = load()
+        if playlist_id in stored['playlists']:
+            stored['playlists'][playlist_id]['track_ids'] = playlist['track_ids']
+            stored['tracks'].update({t['id']: t for t in items})
+            _save(stored, keep_previous=False)
+    return tracks_of(catalog, playlist_id)
+
+
 def maybe_incomplete(playlist):
     """A playlist from a file with exactly 500 songs: probably cut by TuneMyMusic."""
     return playlist.get('owned') is None and len(playlist['track_ids']) == OTHER_USER_CAP
@@ -87,21 +104,32 @@ def refresh_from_spotify(sp, progress=None):
 
     me = sp.me()['id']
     listing = my_playlists(sp)
+    # Only the playlists that are downloaded or sorted are read song by song: the others only need
+    # their name and size, which the listing gives (fewer requests, Spotify has a daily quota).
+    config = config_store.load_config()
+    all_mine = config['download']['mode'] == 'all'
+    used = set(config['download'].get('playlists') or []) | set(config.get('sort_from') or []) \
+        | {e.get('playlist_id') for e in config['playlists']}
     for i, p in enumerate(listing, 1):
         name = clean_name(p['name'])
-        progress(step=f'Reading {name}', done=i, total=len(listing))
         owned = (p.get('owner') or {}).get('id') == me or bool(p.get('collaborative'))
-        try:
-            items = playlist_tracks(sp, p['id'])
-        except Exception:
-            # Unreadable (removed, or not allowed): keep what was read before.
+        if p['id'] not in used and not (all_mine and owned):
             items = tracks_of(old, p['id'])
+            total = (p.get('items') or p.get('tracks') or {}).get('total', len(items))
+        else:
+            progress(step=f'Reading {name}', done=i, total=len(listing))
+            try:
+                items = playlist_tracks(sp, p['id'])
+            except Exception:
+                # Unreadable (removed, or not allowed): keep what was read before.
+                items = tracks_of(old, p['id'])
+            total = len(items)
         for t in items:
             tracks.setdefault(t['id'], t)
         images = p.get('images') or []
         playlists[p['id']] = {'name': name, 'owned': owned, 'track_ids': [t['id'] for t in items],
                               'owner': (p.get('owner') or {}).get('display_name'),
-                              'image_url': images[0]['url'] if images else None}
+                              'image_url': images[0]['url'] if images else None, 'total': total}
 
     catalog = {'source': 'spotify', 'updated_at': _now(), 'file': None, 'playlists': playlists, 'tracks': tracks}
     _save(catalog, keep_previous=old.get('source') != 'spotify')
@@ -310,7 +338,7 @@ def summary(catalog=None):
         'updated_at': catalog['updated_at'],
         'file': catalog['file'],
         'playlists': [
-            {'id': pid, 'name': p['name'], 'owned': p.get('owned'), 'track_count': len(p['track_ids']),
+            {'id': pid, 'name': p['name'], 'owned': p.get('owned'), 'track_count': p.get('total') or len(p['track_ids']),
              'image_url': p.get('image_url'), 'maybe_incomplete': maybe_incomplete(p)}
             for pid, p in catalog['playlists'].items()
         ],

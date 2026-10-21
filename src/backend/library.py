@@ -64,8 +64,11 @@ def load_library():
     else:
         library = {'tracks': {}, 'playlists': {}}
     if 'root' not in library:
-        # Paths are relative to the music folder they were downloaded to.
+        # Paths are relative to the music folder they were downloaded to. Saved right away, so a
+        # change of the music folder in Settings can't be taken for the folder the files are in.
         library['root'] = str(music_root(config_store.load_config()))
+        if LIBRARY_PATH.exists():
+            save_library(library)
     return library
 
 

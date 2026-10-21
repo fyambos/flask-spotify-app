@@ -191,7 +191,7 @@ def analyse(sp, progress=None, playlists=(), multi_playlist=None):
     data = []
     for i, p in enumerate(playlists, 1):
         progress(step=f"Reading {p['name']}", done=i - 1, total=len(playlists))
-        tracks = catalog_store.tracks_of(catalog, p['playlist_id'])
+        tracks = catalog_store.read_playlist(sp, catalog, p['playlist_id'])
         genres = []
         for j, track in enumerate(tracks, 1):
             genres.append(resolver.track_genres(track))
@@ -517,7 +517,7 @@ def _read_playlists(sp, playlists, resolver, progress):
     data = []
     for i, p in enumerate(playlists, 1):
         progress(step=f"Reading {p['name']}", done=i - 1, total=len(playlists))
-        tracks = catalog_store.tracks_of(catalog, sort_state.playlist_key(p))
+        tracks = catalog_store.read_playlist(sp, catalog, sort_state.playlist_key(p))
         data.append({'id': p['id'], 'name': p['name'], 'playlist_id': p['playlist_id'], 'tracks': tracks,
                      'genres': [resolver.track_genres(t) for t in tracks]})
     resolver.save()

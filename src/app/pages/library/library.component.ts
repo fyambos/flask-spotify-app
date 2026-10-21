@@ -22,6 +22,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   layoutLabel = '';
   private poll: any = null;
 
+
   constructor(private playlistService: PlaylistService, private dialog: MatDialog, private statusService: StatusService) { }
 
   ngOnInit(): void {
@@ -44,11 +45,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearInterval(this.poll);
+    clearInterval(this.ticker);
   }
 
   refresh(): void {
     this.playlistService.getLibrary().subscribe(state => {
       this.state = state;
+      this.trackStarted();
       if (!this.importPath) {
         this.importPath = state.music_dir;
       }
@@ -106,6 +109,29 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   reveal(): void {
     this.playlistService.revealLibrary().subscribe();
+  }
+
+  /** Songs shown next to the step: each started song in turn, the last one stays until the next starts. */
+  private started: string[] = [];
+  private songIndex = 0;
+  private ticker: any = setInterval(() => {
+    if (this.songIndex < this.started.length - 1) this.songIndex++;
+  }, 1500);
+
+  private trackStarted(): void {
+    const job = this.state?.job;
+    if (!job?.running) {
+      this.started = [];
+      this.songIndex = 0;
+      return;
+    }
+    for (const name of job.current || []) {
+      if (!this.started.includes(name)) this.started.push(name);
+    }
+  }
+
+  get currentSong(): string {
+    return this.started[this.songIndex] || '';
   }
 
   get list() {

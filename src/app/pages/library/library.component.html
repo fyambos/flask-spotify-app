@@ -14,20 +14,18 @@
 <!-- Next sync -->
 <section *ngIf="state" class="card mt-6 p-6">
   <ng-container *ngIf="state.job.running">
-    <div class="flex items-center justify-between text-sm">
-      <span class="flex items-center gap-2 font-medium">
-        <span class="inline-flex animate-spin text-zinc-400"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span>
-        {{ state.job.step }}
+    <div class="flex items-center justify-between gap-4 text-sm">
+      <span class="flex min-w-0 items-center gap-2">
+        <span class="inline-flex shrink-0 animate-spin text-zinc-400"><lucide-icon name="loader-2" [size]="16"></lucide-icon></span>
+        <span class="shrink-0 font-medium">{{ state.job.step }}</span>
+        <span *ngIf="currentSong" class="truncate text-xs text-zinc-400">{{ currentSong }}</span>
       </span>
-      <span *ngIf="state.job.total" class="tabular-nums text-zinc-500">{{ state.job.done }} / {{ state.job.total }}</span>
+      <span *ngIf="state.job.total" class="shrink-0 tabular-nums text-zinc-500">{{ state.job.done }} / {{ state.job.total }}</span>
     </div>
     <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-100">
       <div class="h-full rounded-full bg-zinc-900 transition-all duration-500"
            [style.width.%]="state.job.total ? 100 * (state.job.done || 0) / (state.job.total || 1) : 5"></div>
     </div>
-    <ul *ngIf="state.job.current?.length" class="mt-3 space-y-0.5 text-xs text-zinc-400">
-      <li *ngFor="let name of state.job.current" class="truncate">{{ name }}</li>
-    </ul>
   </ng-container>
 
   <div *ngIf="!state.job.running" class="flex flex-wrap items-center justify-between gap-4">
